@@ -352,9 +352,15 @@ async def regenerate_single_page(order_id: str, page_number: int):
             return
         scene = pages[idx]["scene"]
         img_bytes = await asyncio.to_thread(fal_service.generate_illustration_pulid, ref_url, scene, new_seed, False)
-        storage.put_object(pages[idx]["image_path"], img_bytes, "image/png")
+        # Write to NEW versioned paths so the previous image survives for version rollback
+        tag = uuid.uuid4().hex[:8]
+        new_img_path = f"{storage.APP_NAME}/orders/{order_id}/page_{page_number}_{tag}.png"
+        storage.put_object(new_img_path, img_bytes, "image/png")
         line_bytes = pdf_service.make_line_art(img_bytes)
-        storage.put_object(pages[idx]["coloring_path"], line_bytes, "image/png")
+        new_line_path = f"{storage.APP_NAME}/orders/{order_id}/coloring_{page_number}_{tag}.png"
+        storage.put_object(new_line_path, line_bytes, "image/png")
+        pages[idx]["image_path"] = new_img_path
+        pages[idx]["coloring_path"] = new_line_path
         order["pages"] = pages
         pdf_bytes, coloring_bytes = _rebuild_pdfs(order)
         storage.put_object(order["pdf_path"], pdf_bytes, "application/pdf")
@@ -393,6 +399,34 @@ async def regenerate_text_only(order_id: str):
     except Exception as e:
         logger.exception(f"regen text failed: {e}")
         await push_status(order_id, "review", f"فشل إعادة صياغة النص: {str(e)[:120]}")
+
+
+async def restore_version_task(order_id: str, version_num: int):
+    try:
+        order = await db.orders.find_one({"id": order_id})
+        if not order:
+            return
+        target = next((v for v in order.get("versions", []) if v["version"] == version_num), None)
+        if not target:
+            await push_status(order_id, order.get("status", "review"), "النسخة المطلوبة غير موجودة")
+            return
+        # Snapshot the CURRENT state first (so restoring is itself reversible)
+        await snapshot_version(order)
+        await push_status(order_id, "generating", f"الرجوع إلى النسخة {version_num}")
+        order["story_title"] = target.get("story_title")
+        order["story_moral"] = target.get("story_moral")
+        order["cover_path"] = target.get("cover_path") or order.get("cover_path")
+        order["pages"] = target.get("pages", [])
+        pdf_bytes, coloring_bytes = await asyncio.to_thread(_rebuild_pdfs, order)
+        storage.put_object(order["pdf_path"], pdf_bytes, "application/pdf")
+        storage.put_object(order["coloring_pdf_path"], coloring_bytes, "application/pdf")
+        await db.orders.update_one({"id": order_id}, {"$set": {
+            "story_title": order["story_title"], "story_moral": order["story_moral"],
+            "cover_path": order["cover_path"], "pages": order["pages"]}})
+        await push_status(order_id, "review", f"تم الرجوع إلى النسخة {version_num}")
+    except Exception as e:
+        logger.exception(f"restore version failed: {e}")
+        await push_status(order_id, "review", f"فشل الرجوع للنسخة: {str(e)[:120]}")
 
 
 # ---------------- Public routes ----------------
@@ -765,6 +799,17 @@ async def admin_regenerate_text(order_id: str, payload: dict = Depends(auth.requ
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     asyncio.create_task(regenerate_text_only(order_id))
+    return {"ok": True}
+
+
+@api.post("/admin/orders/{order_id}/restore-version/{version_num}")
+async def admin_restore_version(order_id: str, version_num: int, payload: dict = Depends(auth.require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    if not any(v["version"] == version_num for v in order.get("versions", [])):
+        raise HTTPException(status_code=404, detail="النسخة غير موجودة")
+    asyncio.create_task(restore_version_task(order_id, version_num))
     return {"ok": True}
 
 

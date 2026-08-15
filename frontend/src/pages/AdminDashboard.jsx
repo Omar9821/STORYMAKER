@@ -219,7 +219,16 @@ export default function AdminDashboard() {
                 {selected.versions?.length > 0 && (
                   <div className="mt-5">
                     <h4 className="font-bold text-navy mb-2 flex items-center gap-2"><ClockCounterClockwise weight="duotone" /> {t("x.versions")}</h4>
-                    {selected.versions.map((v) => <div key={v.version} className="text-xs text-ink/50 py-0.5">{t("x.version")} {v.version} — {new Date(v.timestamp).toLocaleString()}</div>)}
+                    {selected.versions.map((v) => (
+                      <div key={v.version} className="flex items-center justify-between gap-3 py-1 border-b border-border/50 last:border-0" data-testid={`version-row-${v.version}`}>
+                        <span className="text-xs text-ink/60">{t("x.version")} {v.version} — {new Date(v.timestamp).toLocaleString()}</span>
+                        <button onClick={() => act(() => api.post(`/admin/orders/${selected.id}/restore-version/${v.version}`), t("x.restoring"))}
+                          data-testid={`restore-version-${v.version}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-terracotta/10 text-terracotta hover:bg-terracotta/20 transition-colors active:scale-95">
+                          <ArrowClockwise size={12} weight="bold" /> {t("x.restore")}
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
