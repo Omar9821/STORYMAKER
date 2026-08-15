@@ -770,9 +770,9 @@ async def admin_update_status(order_id: str, body: StatusUpdateBody, payload: di
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     await push_status(order_id, body.status, body.note or "")
-    # Auto-delete reference photo once the book has shipped (privacy) — kept until
-    # then so the admin can still fix/regenerate pages during review & printing.
-    if body.status in ("shipped", "delivered") and not order.get("reference_photo_deleted"):
+    # Auto-delete reference photo only once the book was actually GENERATED and has shipped
+    # (never purge the photo of an un-generated order — it would make generation impossible).
+    if body.status in ("shipped", "delivered") and order.get("pages") and not order.get("reference_photo_deleted"):
         await db.orders.update_one({"id": order_id}, {"$set": {"reference_photo_deleted": True}})
     return {"ok": True}
 

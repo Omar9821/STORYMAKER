@@ -65,6 +65,29 @@ def _wrap(text, font, size, max_width):
     return lines
 
 
+def _wrap_shaped(text, font, size, max_width, rtl):
+    """Wrap the LOGICAL text into lines in natural top-to-bottom reading order FIRST,
+    then reshape + apply the bidi algorithm to EACH line individually.
+
+    This is the fix for reversed Arabic narratives: applying get_display() to a whole
+    multi-line paragraph reverses the entire string, so splitting it afterwards puts the
+    END of the text on the first line. Wrapping the logical text first and shaping each
+    line keeps sentences in the correct chronological order (line 1 = first words)."""
+    words = (text or "").split()
+    lines, cur = [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if pdfmetrics.stringWidth(_shape(trial, rtl), font, size) <= max_width:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return [_shape(ln, rtl) for ln in lines]
+
+
 def _mix(color, amt):
     """Mix an (r,g,b) 0..1 color toward white by amt (0=color, 1=white)."""
     return tuple(v + (1.0 - v) * amt for v in color)
@@ -144,16 +167,15 @@ class BookCanvas:
         p.close()
         c.setFillColor(Color(*color)); c.drawPath(p, fill=1, stroke=0)
 
-    def paragraph(self, text, x, y_bottom, box_w, box_h, size, font, color):
+    def paragraph(self, text, rtl, x, y_bottom, box_w, box_h, size, font, color):
         c = self.c
         text = re.sub(r'([:.،,!؟?])(?=\S)', r'\1 ', (text or "").strip())
-        lines = _wrap(text, font, size, box_w)
+        lines = _wrap_shaped(text, font, size, box_w, rtl)
         line_h = size * 1.55
         total = len(lines) * line_h
         cx = x + box_w / 2
         y = y_bottom + (box_h + total) / 2 - line_h
         c.setFont(font, size); c.setFillColor(Color(*color))
-        rtl = font == BODY  # shaping handled by caller; we pass already-logical text
         for ln in lines:
             c.drawCentredString(cx, y, ln)
             y -= line_h
@@ -189,7 +211,7 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
     bc.logo_badge(rtl, _mix(dom, 0.05))
     # title (big playful display)
     dark = (0.16, 0.17, 0.28)
-    title_lines = _wrap(shp(title), DISPLAY, 46, W - 90)
+    title_lines = _wrap_shaped(title, DISPLAY, 46, W - 90, rtl)
     c.setFillColor(Color(*dark)); c.setFont(DISPLAY, 46)
     ty = cy - r - 70
     for ln in title_lines:
@@ -221,7 +243,7 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
         # text in the lower portion of the card
         txt_bottom = card_y + pad
         txt_h = img_y - txt_bottom
-        bc.paragraph(shp(pg.get("text", "")), card_x + pad + 6, txt_bottom,
+        bc.paragraph(pg.get("text", ""), rtl, card_x + pad + 6, txt_bottom,
                      card_w - 2 * pad - 12, txt_h, 19, BODY, (0.18, 0.19, 0.30))
         # logo + page number
         bc.logo_badge(rtl, _mix(dom, 0.02))
@@ -251,7 +273,7 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
     if moral:
         c.setFont(DISPLAY, 22); c.setFillColor(Color(0.20, 0.22, 0.30))
         y = H * 0.52
-        for ln in _wrap(shp(moral), DISPLAY, 22, W - 2 * fm - 70):
+        for ln in _wrap_shaped(moral, DISPLAY, 22, W - 2 * fm - 70, rtl):
             c.drawCentredString(W / 2, y, ln)
             y -= 34
     bc.star(W / 2, H * 0.355, 18, _mix(end_dom, 0.0))

@@ -129,7 +129,10 @@ def generate_illustration_pulid(reference_image_url: str, scene: str, seed: int,
                                 is_cover: bool = False, id_weight: float = 1.0,
                                 style: str = "cartoon") -> bytes:
     """Generate one illustration preserving the child's identity from reference_image_url.
-    `style` is the customer-selected art style (cartoon | watercolor | 3d). Returns PNG/JPEG bytes."""
+    `style` is the customer-selected art style (cartoon | watercolor | 3d). Returns PNG/JPEG bytes.
+
+    Wrapped in a retry loop so a transient fal proxy 503 / timeout on a single image does not
+    abort the whole book generation."""
     style_desc, style_neg = _style_bits(style)
     prompt = (
         f"An illustration of the same child from the reference photo, keeping their real face, "
@@ -147,11 +150,25 @@ def generate_illustration_pulid(reference_image_url: str, scene: str, seed: int,
         "seed": seed,
         "negative_prompt": f"{style_neg}, realistic skin texture, deformed, ugly, extra fingers, text, watermark, blurry",
     }
-    result = run_media_generation(PULID_ENDPOINT, payload)
-    images = result.get("images") or []
-    if not images or not images[0].get("url"):
-        raise FalError("No image returned")
-    img_url = images[0]["url"]
-    r = requests.get(img_url, timeout=60)
-    r.raise_for_status()
-    return r.content
+    last_err = None
+    for attempt in range(3):
+        try:
+            result = run_media_generation(PULID_ENDPOINT, payload)
+            images = result.get("images") or []
+            if not images or not images[0].get("url"):
+                raise FalError("No image returned")
+            img_url = images[0]["url"]
+            r = requests.get(img_url, timeout=60)
+            r.raise_for_status()
+            return r.content
+        except FalError as e:
+            # Never retry a hard credit failure — surface it immediately.
+            if "credits" in str(e).lower():
+                raise
+            last_err = e
+            logger.warning(f"fal illustration attempt {attempt + 1}/3 failed: {e}")
+        except (requests.HTTPError, requests.RequestException) as e:
+            last_err = e
+            logger.warning(f"fal illustration attempt {attempt + 1}/3 network error: {e}")
+        time.sleep(5 * (attempt + 1))
+    raise FalError(f"Illustration failed after 3 attempts: {last_err}")
