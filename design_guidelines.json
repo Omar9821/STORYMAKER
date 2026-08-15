@@ -1,0 +1,130 @@
+{
+  "theme": "light",
+  "typography": {
+    "fonts": {
+      "arabic": {
+        "heading": "'Tajawal', sans-serif",
+        "body": "'Tajawal', sans-serif",
+        "story_text": "'Amiri', serif"
+      },
+      "latin": {
+        "heading": "'Quicksand', sans-serif",
+        "body": "'Nunito', sans-serif"
+      }
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight",
+      "h3": "text-xl sm:text-2xl",
+      "h4": "text-lg sm:text-xl",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm"
+    },
+    "rules": [
+      "DO NOT use Inter, Roboto, or standard sans. Use Tajawal/Quicksand for a soft, friendly, and trustworthy feel.",
+      "Always set dir='rtl' on the root or main Arabic containers. Use logical Tailwind properties (ps-*, pe-*, ms-*, me-*, text-start, text-end) instead of left/right specific properties so it gracefully supports both Arabic (RTL) and French/English (LTR)."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "background": "#FAFAF8",
+      "surface": "#FFFFFF",
+      "primary": "#E07A5F",
+      "primary_hover": "#D0674D",
+      "secondary": "#3D405B",
+      "accent_green": "#81B29A",
+      "accent_yellow": "#F2CC8F",
+      "text_main": "#2B2D42",
+      "text_muted": "#6C757D",
+      "border": "#E5E5E0"
+    },
+    "rules": [
+      "Archetype: Organic & Earthy + Pastel & Soft. Represents warmth, trust, and storytelling magic.",
+      "Background should be warm bone-white/cream, never pure white.",
+      "Primary CTA uses Terracotta (#E07A5F).",
+      "Text should be deep Navy (#3D405B) or Charcoal (#2B2D42) for high APCA contrast. NEVER pure black.",
+      "Avoid harsh full-screen gradients. Use soft radial glows of accent_yellow or accent_green behind floating elements.",
+      "FORBIDDEN_COLOR: #7351B7"
+    ]
+  },
+  "visual_enhancers": {
+    "surface_styles": {
+      "cards": "bg-white rounded-3xl shadow-[0_8px_30px_rgba(61,64,91,0.04)] border border-border/50",
+      "wizard_steps": "Neumorphic tactile buttons for selecting options (boy/girl, story type). Soft shadows with crisp 1px inner borders.",
+      "header": "Glassmorphism: backdrop-blur-xl bg-white/70 with 1px border-b border-border/40."
+    },
+    "motion": {
+      "libraries": ["framer-motion", "lenis"],
+      "rules": [
+        "Use 'Lenis' for smooth scrolling on the marketing page.",
+        "Wizard steps should transition with a horizontal slide or 'page turn' effect (using Framer Motion).",
+        "Hover states on cards: slight lift (-translate-y-1) and increased shadow.",
+        "All buttons must have a scale down on tap (active:scale-95)."
+      ]
+    },
+    "borders_and_radius": {
+      "radius_base": "rounded-2xl",
+      "radius_large": "rounded-3xl",
+      "radius_full": "rounded-full"
+    }
+  },
+  "layouts_and_spacing": {
+    "spacing_scale": "Use generous padding: p-6, p-8 for cards, p-16 to p-32 for section gaps. Children's themes need breathing room.",
+    "grids": {
+      "marketing_hero": "grid-cols-1 lg:grid-cols-12 gap-8. Text content spans 7 cols, Image spans 5 cols.",
+      "bento_features": "grid-cols-1 md:grid-cols-8 gap-6. Mix square and wide rectangles for 'How it works'."
+    },
+    "alignment": "RTL-first. Hero content should start on the right for Arabic. Ensure all flex containers use flex-row (which naturally flips in RTL) and logical spacing (gap-x-4)."
+  },
+  "components": {
+    "ui_library": "shadcn/ui (customized for softness and RTL)",
+    "specific_components": {
+      "Wizard": "Multi-step form using state. Progress bar at the top using accent_green.",
+      "PhotoUpload": "Drag-and-drop zone with dashed border, rounded-2xl, soft background.",
+      "OrderTracker": "Vertical timeline with icons (Phosphor icons). Completed steps in accent_green, current in primary.",
+      "Pricing": "Highlight the 3400 DZD price clearly with a 'Best Value' or 'Magical Gift' badge."
+    }
+  },
+  "media": {
+    "icons": "@phosphor-icons/react (Duotone weight for a magical, illustrated feel).",
+    "images": [
+      {
+        "url": "https://images.unsplash.com/photo-1575198731708-eea0f0d1e21a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwzfHxjaGlsZCUyMHJlYWRpbmclMjBib29rJTIwc21pbGluZ3xlbnwwfHx8fDE3ODY3OTEwMzF8MA&ixlib=rb-4.1.0&q=85",
+        "category": "Hero Section",
+        "description": "Girl reading a book with warm light, conveying the joy of storytelling."
+      },
+      {
+        "url": "https://images.pexels.com/photos/4586630/pexels-photo-4586630.jpeg",
+        "category": "Testimonials / Trust Section",
+        "description": "Parents and child reading together, building trust and family bonding."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1625675039791-488f74e7b72e",
+        "category": "Features / AI Magic Section",
+        "description": "A book glowing with green magical light, representing the AI personalization."
+      }
+    ]
+  },
+  "accessibility": {
+    "contrast": "Ensure white text on Terracotta primary button meets minimum 3:1 APCA. Use deep Navy for all text on light backgrounds.",
+    "focus": "focus:ring-2 focus:ring-primary/50 focus:outline-none rounded-xl."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You MUST NOT apply universal transitions (e.g., transition: all). Add transitions for specific properties.",
+    "Do not use generic centered layouts. Use asymmetrical layouts to create tension and interest.",
+    "CRITICAL for RTL: Use Tailwind's logical properties. Replace 'pl-*' with 'ps-*', 'pr-*' with 'pe-*', 'ml-*' with 'ms-*', 'mr-*' with 'me-*', 'text-left' with 'text-start', 'text-right' with 'text-end', 'border-l' with 'border-s', 'border-r' with 'border-e'.",
+    "Ensure 'dir=\"rtl\"' is dynamically handled or set on the root for Arabic.",
+    "Use Phosphor Icons (Duotone) to match the children's storybook aesthetic.",
+    "Every interactive element MUST have a 'data-testid' attribute (e.g., data-testid='start-wizard-btn').",
+    "DO NOT use a completely transparent background on the sticky header. Use backdrop-blur-xl bg-white/70."
+  ],
+  "instructions_to_main_agent": [
+    "Start by installing dependencies: framer-motion, @phosphor-icons/react, lenis (for smooth scroll), lucide-react (if shadcn uses it natively, but prefer phosphor where possible).",
+    "Set up Tajawal, Quicksand, and Amiri fonts in index.css using Google Fonts @import.",
+    "Build the hybrid app: A marketing landing page with a hero, 'How it works' bento grid, pricing (3400 DZD), and a prominent CTA 'إصنع قصة طفلك الآن' (Create your child's story now).",
+    "Implement the Multi-step Wizard: 1. Child Details (Name, Age, Gender), 2. Story Goal, 3. Photo Upload (with privacy consent checkbox), 4. Language Selection (AR/EN/FR).",
+    "Implement the Order Tracking UI (Timeline) and a mock Admin Dashboard table for managing orders.",
+    "Ensure the entire app is fully responsive, looking great on mobile since parents will likely order via phones.",
+    "Use standard HTML/Tailwind for the marketing layouts, and customized Shadcn components for Wizard forms and Admin UI."
+  ]
+}
