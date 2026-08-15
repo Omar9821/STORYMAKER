@@ -592,8 +592,16 @@ async def pay_order(order_id: str, body: PayBody):
         await push_status(order_id, "awaiting_payment", "تم تأكيد الطلب (الدفع عند الاستلام) — بانتظار التوليد")
         return {"method": "cod", "order_id": order_id, "redirect": f"/track/{order_id}"}
 
-    # Online payment (Chargily) is not enabled yet — manual/COD only for now.
-    raise HTTPException(status_code=400, detail="المدفوعات الإلكترونية غير مفعّلة حالياً — الدفع عند الاستلام فقط")
+    # Online payment via Chargily hosted checkout.
+    if body.method == "chargily":
+        result = await payment_service.create_checkout(order_id, int(order["amount"]), body.payment_method or "edahabia")
+        await db.orders.update_one({"id": order_id}, {"$set": {
+            "payment_method": "chargily",
+            "chargily_checkout_id": result["checkout_id"],
+        }})
+        return {"method": "chargily", "checkout_url": result["checkout_url"], "order_id": order_id}
+
+    raise HTTPException(status_code=400, detail="طريقة دفع غير معروفة")
 
 
 @api.post("/payments/mock-confirm/{order_id}")

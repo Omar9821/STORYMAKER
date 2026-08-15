@@ -97,7 +97,7 @@ export default function Wizard() {
     setSubmitting(true);
     try {
       const { data } = await api.post("/orders", form);
-      navigate(`/track/${data.id}`);
+      navigate(`/pay/${data.id}`);
     } catch (e) { toast.error(e.response?.data?.detail || t("common.error")); setSubmitting(false); }
   };
 

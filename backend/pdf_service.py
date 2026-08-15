@@ -50,6 +50,20 @@ def _shape(text: str, rtl: bool) -> str:
     return get_display(_fix_isolated(arabic_reshaper.reshape(text))) if rtl else text
 
 
+def _clean_text(text: str) -> str:
+    """Deterministic Arabic text hygiene applied to EVERY story (radical, LLM-independent):
+    - strip quotation marks (ASCII/smart/back-ticks) that float wrongly in RTL reshaping,
+    - collapse repeated whitespace,
+    - remove any space BEFORE punctuation and guarantee one space AFTER it,
+    so dialogue and sentences never render with detached/overlapping symbols."""
+    t = (text or "").strip()
+    t = re.sub(r"[\"'“”‘’`´«»]", "", t)          # drop stray quote glyphs
+    t = re.sub(r"\s+", " ", t)                     # normalise whitespace
+    t = re.sub(r"\s+([،.!؟:,;])", r"\1", t)        # no space before punctuation
+    t = re.sub(r"([،.!؟:,;])(?=\S)", r"\1 ", t)    # one space after punctuation
+    return t.strip()
+
+
 def _wrap(text, font, size, max_width):
     lines, cur = [], ""
     for w in (text or "").split():
@@ -73,7 +87,7 @@ def _wrap_shaped(text, font, size, max_width, rtl):
     multi-line paragraph reverses the entire string, so splitting it afterwards puts the
     END of the text on the first line. Wrapping the logical text first and shaping each
     line keeps sentences in the correct chronological order (line 1 = first words)."""
-    words = (text or "").split()
+    words = _clean_text(text).split()
     lines, cur = [], ""
     for w in words:
         trial = (cur + " " + w).strip()
@@ -169,7 +183,6 @@ class BookCanvas:
 
     def paragraph(self, text, rtl, x, y_bottom, box_w, box_h, size, font, color):
         c = self.c
-        text = re.sub(r'([:.،,!؟?])(?=\S)', r'\1 ', (text or "").strip())
         lines = _wrap_shaped(text, font, size, box_w, rtl)
         line_h = size * 1.55
         total = len(lines) * line_h

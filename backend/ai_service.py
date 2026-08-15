@@ -59,9 +59,13 @@ async def generate_story(child_name: str, child_age: int, child_gender: str,
         f"sentence that sets it up. The reader reads top-to-bottom in natural event order.\n"
         f"2. Across the {NUM_STORY_PAGES} pages the plot must flow logically: setup, rising action, "
         f"turning point, resolution, gentle ending. Page N must continue directly from page N-1.\n"
-        f"3. Write flawless {lang_name}: correct spelling, no missing letters, correct spacing between "
-        f"words, and correct punctuation. Re-read each sentence before finalising.\n"
-        f"4. Keep each sentence self-contained and clear; avoid ambiguous pronouns.\n\n"
+        f"3. Write flawless {lang_name}: correct spelling, no missing or extra letters, correct "
+        f"hamza and taa-marbuta, correct spacing between words, and correct punctuation. "
+        f"Re-read and proofread every sentence before finalising.\n"
+        f"4. Keep each sentence self-contained and clear; avoid ambiguous pronouns.\n"
+        f"5. Do NOT use quotation marks of ANY kind (no ' \" « » ` ). Present any speech directly "
+        f"after a colon, e.g. قالت الأم بحنان: أنت رائع. Use only Arabic punctuation (، ؛ ؟ .) "
+        f"for Arabic text — never Latin quotes or stray symbols.\n\n"
         f"Return ONLY this JSON (no markdown fences):\n"
         f'{{"title": "story title in {lang_name}", '
         f'"moral": "one gentle takeaway line in {lang_name}", '

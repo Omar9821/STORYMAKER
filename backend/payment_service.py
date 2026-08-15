@@ -28,7 +28,7 @@ async def create_checkout(order_id: str, amount: int, payment_method: str = "eda
         "payment_method": payment_method,
         "locale": "ar",
         "description": f"Hikayati order {order_id}",
-        "metadata": [{"order_id": order_id}],
+        "metadata": {"order_id": order_id},
         "success_url": f"{FRONTEND_URL}/track/{order_id}?paid=1",
         "failure_url": f"{FRONTEND_URL}/track/{order_id}?failed=1",
         "webhook_endpoint": f"{BACKEND_PUBLIC_URL}/api/payments/webhook",
