@@ -98,14 +98,42 @@ STORYBOOK_STYLE = (
     "gouache, gentle rounded cartoon style, cozy warm palette, whimsical and adorable, cute cartoon child"
 )
 
+# Per-order selectable art styles (customer choice)
+STYLE_PROMPTS = {
+    "cartoon": (
+        "in the style of a warm hand-painted children's storybook illustration, gentle rounded 2D cartoon "
+        "style, bold clean outlines, flat cheerful colours, cozy warm palette, whimsical and adorable, cute cartoon child"
+    ),
+    "watercolor": (
+        "in the style of a soft watercolour children's storybook painting, delicate washes and gentle gradients, "
+        "hand-painted gouache texture, dreamy pastel palette, soft edges, whimsical and adorable"
+    ),
+    "3d": (
+        "in the style of a cute Pixar-like 3D rendered animation, soft global illumination, subsurface skin shading, "
+        "rounded friendly character design, glossy playful colours, cinematic depth of field, adorable 3D cartoon child"
+    ),
+}
+STYLE_NEGATIVES = {
+    "cartoon": "photorealistic, photograph, 3d render",
+    "watercolor": "photorealistic, photograph, harsh outlines, 3d render",
+    "3d": "flat 2d, photorealistic photograph, harsh outlines",
+}
+
+
+def _style_bits(style: str):
+    style = (style or "cartoon").lower()
+    return STYLE_PROMPTS.get(style, STORYBOOK_STYLE), STYLE_NEGATIVES.get(style, "photorealistic, photograph, 3d render")
+
 
 def generate_illustration_pulid(reference_image_url: str, scene: str, seed: int,
-                                is_cover: bool = False, id_weight: float = 1.0) -> bytes:
+                                is_cover: bool = False, id_weight: float = 1.0,
+                                style: str = "cartoon") -> bytes:
     """Generate one illustration preserving the child's identity from reference_image_url.
-    Returns PNG/JPEG bytes."""
+    `style` is the customer-selected art style (cartoon | watercolor | 3d). Returns PNG/JPEG bytes."""
+    style_desc, style_neg = _style_bits(style)
     prompt = (
-        f"A cartoon illustration of the same child from the reference photo, keeping their real face, "
-        f"skin tone and hairstyle, {STORYBOOK_STYLE}. Scene: {scene}."
+        f"An illustration of the same child from the reference photo, keeping their real face, "
+        f"skin tone and hairstyle, {style_desc}. Scene: {scene}."
     )
     if is_cover:
         prompt += " Full body, centered, happy expression, empty space at the top."
@@ -117,7 +145,7 @@ def generate_illustration_pulid(reference_image_url: str, scene: str, seed: int,
         "num_inference_steps": 20,
         "guidance_scale": 4,
         "seed": seed,
-        "negative_prompt": "photorealistic, photograph, realistic skin texture, deformed, ugly, extra fingers, text, watermark, blurry",
+        "negative_prompt": f"{style_neg}, realistic skin texture, deformed, ugly, extra fingers, text, watermark, blurry",
     }
     result = run_media_generation(PULID_ENDPOINT, payload)
     images = result.get("images") or []

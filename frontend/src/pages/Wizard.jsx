@@ -36,7 +36,7 @@ export default function Wizard() {
   const [form, setForm] = useState({
     characters: [emptyChar(true)],
     story_type: "encouragement", positive_behaviors: "", negative_behaviors: "", special_details: "",
-    language: "ar", language_level: "simple", story_setting: [],
+    language: "ar", language_level: "simple", art_style: "cartoon", story_setting: [],
     lives_with: "", mother_name: "", mother_age: "", father_name: "", father_age: "", mention_parents: true,
     siblings: [], friends: [], quantity: 1, coupon_code: "",
     customer_name: "", customer_phone: "", customer_email: "", wilaya: "", shipping_address: "", consent: false,
@@ -202,6 +202,18 @@ export default function Wizard() {
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     {[["simple", t("x.simple")], ["medium", t("x.medium")], ["advanced", t("x.advanced")]].map(([v, l]) => (
                       <Choice key={v} active={form.language_level === v} onClick={() => set("language_level", v)} testid={`level-${v}`}>{l}</Choice>))}
+                  </div>
+                  <label className={label}>{t("x.artStyle")}</label>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {[["cartoon", t("x.styleCartoon"), "/styles/cartoon.jpg"], ["watercolor", t("x.styleWatercolor"), "/styles/watercolor.jpg"], ["3d", t("x.style3d"), "/styles/style3d.jpg"]].map(([v, l, img]) => (
+                      <button key={v} type="button" onClick={() => set("art_style", v)} data-testid={`style-${v}`}
+                        className={`rounded-2xl border-2 overflow-hidden text-center transition-all active:scale-95 ${form.art_style === v ? "border-terracotta ring-2 ring-terracotta/30 shadow-md" : "border-border hover:border-terracotta/40"}`}>
+                        <div className="relative aspect-square">
+                          <img src={img} alt={l} className="w-full h-full object-cover" />
+                          {form.art_style === v && <span className="absolute top-1.5 end-1.5 bg-terracotta text-white rounded-full p-1"><CheckCircle size={16} weight="fill" /></span>}
+                        </div>
+                        <span className={`block py-2 text-sm font-bold ${form.art_style === v ? "text-terracotta" : "text-ink/70"}`}>{l}</span>
+                      </button>))}
                   </div>
                   <label className={label}>{t("x.place")}</label>
                   <div className="grid grid-cols-2 gap-2">

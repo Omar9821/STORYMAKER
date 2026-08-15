@@ -36,6 +36,8 @@
 ### DONE (2026-06, latest iteration)
 - **RTL PDF line ordering (Item 17-a)** — VERIFIED: `draw_text_block` wraps logical Arabic text first, then reshapes+bidi per line. Visual check (analyze_file_tool) confirms all lines read top-to-bottom correctly. No backend regression (testing iteration_5: 16/16 pass).
 - **Version rollback (Item 16 completion)** — Admin can now RESTORE any previous version. `regenerate_single_page` writes images to NEW versioned paths (`page_{n}_{tag}.png`) so prior images survive; `restore_version_task` snapshots current state (reversible), restores story_title/moral/pages/cover, rebuilds both PDFs. New endpoint `POST /admin/orders/{id}/restore-version/{version_num}` (guards: 401 unauth, 404 missing order/version). UI: restore button per version in order drawer (`data-testid=restore-version-{v}`).
+- **Version preview (admin)** — each version row in the order drawer is expandable (`version-toggle-{v}`) showing cover + page thumbnails + text + title/moral, so admin can compare visually before restoring.
+- **Art style selection (customer)** — Wizard step 3 lets the customer pick an illustration style: Cartoon / Watercolor / 3D, shown as visual sample thumbnails (`/styles/*.jpg`, testids `style-cartoon|watercolor|3d`). Stored as `order.art_style`; fed into fal PuLID prompt/negative-prompt via `fal_service.STYLE_PROMPTS`. Style shown in admin order detail. Verified e2e (order stores art_style) + UI screenshot.
 
 ### P2
 - Real Chargily key (leave mock now), print-partner API later, art-style selector, video/audio upsell (deferred).

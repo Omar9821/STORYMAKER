@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   SignOut, Package, Coins, ChartBar, X, ArrowClockwise, CheckCircle, Truck, Printer,
-  FilePdf, Trash, BookOpenText, ClockCounterClockwise, TextT, Ticket, Tag, ChartLineUp,
+  FilePdf, Trash, BookOpenText, ClockCounterClockwise, TextT, Ticket, Tag, ChartLineUp, CaretDown,
 } from "@phosphor-icons/react";
 import { api, fileUrl } from "../lib/api";
 
@@ -25,6 +25,7 @@ export default function AdminDashboard() {
   const [settings, setSettings] = useState({ base_price: 3400, extra_character_price: 250 });
   const [selected, setSelected] = useState(null);
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent", value: 10, max_uses: 0 });
+  const [expandedVer, setExpandedVer] = useState(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -183,6 +184,7 @@ export default function AdminDashboard() {
               <Row label={t("x.total")} value={`${selected.amount} DZD (${selected.extra_characters || 0}×${selected.extra_character_price || 0})`} />
               <Row label={t("track.status")} value={t(`track.st_${selected.status}`)} />
               <Row label={t("admin.aiCost")} value={`$${selected.ai_cost_usd || 0}`} />
+              {selected.art_style && <Row label={t("x.artStyle")} value={t(`x.style${selected.art_style === "3d" ? "3d" : selected.art_style.charAt(0).toUpperCase() + selected.art_style.slice(1)}`)} />}
               {selected.avg_similarity != null && <Row label={t("admin.similarity")} value={`${selected.avg_similarity} (MOCK)`} />}
               <Row label={t("admin.refDeleted")} value={selected.reference_photo_deleted ? "✓" : "—"} />
               {selected.versions?.length > 0 && <Row label={t("x.versions")} value={selected.versions.length} />}
@@ -220,13 +222,34 @@ export default function AdminDashboard() {
                   <div className="mt-5">
                     <h4 className="font-bold text-navy mb-2 flex items-center gap-2"><ClockCounterClockwise weight="duotone" /> {t("x.versions")}</h4>
                     {selected.versions.map((v) => (
-                      <div key={v.version} className="flex items-center justify-between gap-3 py-1 border-b border-border/50 last:border-0" data-testid={`version-row-${v.version}`}>
-                        <span className="text-xs text-ink/60">{t("x.version")} {v.version} — {new Date(v.timestamp).toLocaleString()}</span>
-                        <button onClick={() => act(() => api.post(`/admin/orders/${selected.id}/restore-version/${v.version}`), t("x.restoring"))}
-                          data-testid={`restore-version-${v.version}`}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-terracotta/10 text-terracotta hover:bg-terracotta/20 transition-colors active:scale-95">
-                          <ArrowClockwise size={12} weight="bold" /> {t("x.restore")}
-                        </button>
+                      <div key={v.version} className="border-b border-border/50 last:border-0 py-1.5" data-testid={`version-row-${v.version}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <button onClick={() => setExpandedVer(expandedVer === v.version ? null : v.version)} data-testid={`version-toggle-${v.version}`}
+                            className="text-xs text-navy font-semibold inline-flex items-center gap-1 hover:text-terracotta">
+                            <CaretDown size={12} weight="bold" className={`transition-transform ${expandedVer === v.version ? "rotate-180" : ""}`} />
+                            {t("x.version")} {v.version} — {new Date(v.timestamp).toLocaleString()}
+                          </button>
+                          <button onClick={() => act(() => api.post(`/admin/orders/${selected.id}/restore-version/${v.version}`), t("x.restoring"))}
+                            data-testid={`restore-version-${v.version}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-terracotta/10 text-terracotta hover:bg-terracotta/20 transition-colors active:scale-95">
+                            <ArrowClockwise size={12} weight="bold" /> {t("x.restore")}
+                          </button>
+                        </div>
+                        {expandedVer === v.version && (
+                          <div className="mt-2 bg-muted/40 rounded-xl p-3" data-testid={`version-preview-${v.version}`}>
+                            {v.story_title && <div className="text-sm font-bold text-navy mb-1">{v.story_title}</div>}
+                            {v.story_moral && <div className="text-xs text-ink/60 mb-2 italic">{v.story_moral}</div>}
+                            <div className="flex gap-1.5 overflow-x-auto pb-1">
+                              {v.cover_path && <img src={fileUrl(v.cover_path)} alt="cover" className="w-16 h-20 object-cover rounded-md shadow shrink-0" />}
+                              {(v.pages || []).map((p) => (
+                                <div key={p.page_number} className="shrink-0 w-16">
+                                  <img src={fileUrl(p.image_path)} alt="" className="w-16 h-20 object-cover rounded-md shadow" />
+                                  <p className="text-[9px] text-ink/50 leading-tight mt-0.5 line-clamp-2">{p.text}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

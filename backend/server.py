@@ -106,6 +106,7 @@ class OrderCreate(BaseModel):
     special_details: str = ""
     language: str
     language_level: str = "simple"
+    art_style: str = "cartoon"  # cartoon | watercolor | 3d
     story_setting: list[str] = []
     lives_with: str
     mother_name: str = ""
@@ -222,6 +223,7 @@ async def run_generation(order_id: str):
         # Public URL of the reference photo (fal fetches it as the identity source)
         ref_url = f"{BACKEND_PUBLIC_URL}/api/files/{order['reference_photo_path']}"
         seed = order.get("gen_seed") or (uuid.uuid4().int % 1_000_000)
+        art_style = order.get("art_style", "cartoon")
 
         story = await ai_service.generate_story(
             order["child_name"], order["child_age"], order["child_gender"],
@@ -235,7 +237,7 @@ async def run_generation(order_id: str):
         # Cover (identity-preserving via fal PuLID)
         cover_scene = story["pages"][0]["scene"] if story["pages"] else f"{order['child_name']} smiling happily"
         cover_bytes = await asyncio.to_thread(
-            fal_service.generate_illustration_pulid, ref_url, cover_scene, seed, True)
+            fal_service.generate_illustration_pulid, ref_url, cover_scene, seed, True, 1.0, art_style)
         cover_path = f"{storage.APP_NAME}/orders/{order_id}/cover.png"
         storage.put_object(cover_path, cover_bytes, "image/png")
         cover_sim = ai_service.mock_face_similarity(f"{order_id}-cover")
@@ -246,7 +248,7 @@ async def run_generation(order_id: str):
         line_pages = []
         for i, pg in enumerate(story["pages"]):
             img_bytes = await asyncio.to_thread(
-                fal_service.generate_illustration_pulid, ref_url, pg["scene"], seed, False)
+                fal_service.generate_illustration_pulid, ref_url, pg["scene"], seed, False, 1.0, art_style)
             path = f"{storage.APP_NAME}/orders/{order_id}/page_{i+1}.png"
             storage.put_object(path, img_bytes, "image/png")
 
@@ -351,7 +353,7 @@ async def regenerate_single_page(order_id: str, page_number: int):
         if idx is None:
             return
         scene = pages[idx]["scene"]
-        img_bytes = await asyncio.to_thread(fal_service.generate_illustration_pulid, ref_url, scene, new_seed, False)
+        img_bytes = await asyncio.to_thread(fal_service.generate_illustration_pulid, ref_url, scene, new_seed, False, 1.0, order.get("art_style", "cartoon"))
         # Write to NEW versioned paths so the previous image survives for version rollback
         tag = uuid.uuid4().hex[:8]
         new_img_path = f"{storage.APP_NAME}/orders/{order_id}/page_{page_number}_{tag}.png"
@@ -518,6 +520,7 @@ async def create_order(body: OrderCreate):
         "special_details": body.special_details,
         "language": body.language,
         "story_level": body.language_level,
+        "art_style": body.art_style,
         "story_setting": body.story_setting,
         "extra_context": build_story_context(body),
         "lives_with": body.lives_with,
