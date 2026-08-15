@@ -60,17 +60,21 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
     margin = 40
 
     def draw_text_block(text, y_top, size, font, color=(0.17, 0.18, 0.26)):
+        import re
+        text = re.sub(r'([:.،,!؟?])(?=\S)', r'\1 ', (text or "").strip())
         c.setFont(font, size)
         c.setFillColorRGB(*color)
         max_w = W - 2 * margin
-        shaped = _shape(text, rtl)
-        lines = _wrap(c, shaped, font, size, max_w)
+        # Wrap the LOGICAL text first (preserves natural top-to-bottom order),
+        # then reshape each line for correct RTL glyph joining.
+        lines = _wrap(c, text, font, size, max_w)
         y = y_top
         for line in lines:
+            disp = _shape(line, rtl)
             if rtl:
-                c.drawRightString(W - margin, y, line)
+                c.drawRightString(W - margin, y, disp)
             else:
-                c.drawString(margin, y, line)
+                c.drawString(margin, y, disp)
             y -= size * 1.5
         return y
 
@@ -85,39 +89,57 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
             pass
 
     # ---- Cover ----
-    c.setFillColorRGB(0.98, 0.98, 0.97)
+    c.setFillColorRGB(0.96, 0.85, 0.62)
     c.rect(0, 0, W, H, fill=1, stroke=0)
-    draw_image_area(cover_image, margin, H * 0.32, W - 2 * margin, H * 0.55)
-    c.setFont(bold_font, 34)
+    c.setFillColorRGB(0.98, 0.93, 0.80)
+    c.rect(0, 0, W, H * 0.62, fill=1, stroke=0)
+    # logo badge (top)
     c.setFillColorRGB(0.88, 0.48, 0.37)
-    shaped_title = _shape(title, rtl)
-    c.drawCentredString(W / 2, H * 0.22, shaped_title)
-    c.setFont(body_font, 14)
-    c.setFillColorRGB(0.24, 0.25, 0.36)
-    c.drawCentredString(W / 2, H * 0.17, _shape("حكايتي" if rtl else "Hikayati", rtl))
+    c.roundRect(W / 2 - 60, H - 70, 120, 34, 16, fill=1, stroke=0)
+    c.setFont(bold_font, 16); c.setFillColorRGB(1, 1, 1)
+    c.drawCentredString(W / 2, H - 60, _shape("حكايتي" if rtl else "Hikayati", rtl))
+    # hero image
+    draw_image_area(cover_image, margin, H * 0.30, W - 2 * margin, H * 0.52)
+    # title on a soft band
+    c.setFillColorRGB(1, 1, 1)
+    c.roundRect(margin, H * 0.15, W - 2 * margin, H * 0.12, 20, fill=1, stroke=0)
+    c.setFont(bold_font, 34); c.setFillColorRGB(0.88, 0.48, 0.37)
+    c.drawCentredString(W / 2, H * 0.19, _shape(title, rtl))
     c.showPage()
 
-    # ---- Story pages ----
-    for pg in pages:
-        c.setFillColorRGB(0.99, 0.99, 0.98)
+    # ---- Story pages: near full-bleed image + coloured text band + logo badge ----
+    for i, pg in enumerate(pages):
+        c.setFillColorRGB(0.99, 0.985, 0.97)
         c.rect(0, 0, W, H, fill=1, stroke=0)
         if pg.get("image"):
-            draw_image_area(pg["image"], margin, H * 0.42, W - 2 * margin, H * 0.5)
-        draw_text_block(pg.get("text", ""), H * 0.34, 18, body_font)
+            draw_image_area(pg["image"], 0, H * 0.34, W, H * 0.66)
+        # coloured text band at the bottom
+        c.setFillColorRGB(0.95, 0.90, 0.78)
+        c.roundRect(margin * 0.6, H * 0.05, W - margin * 1.2, H * 0.26, 18, fill=1, stroke=0)
+        draw_text_block(pg.get("text", ""), H * 0.27, 18, body_font)
+        # logo badge + page number
+        c.setFillColorRGB(0.88, 0.48, 0.37)
+        c.roundRect(W - 120, H - 44, 96, 26, 12, fill=1, stroke=0)
+        c.setFont(bold_font, 12); c.setFillColorRGB(1, 1, 1)
+        c.drawCentredString(W - 72, H - 37, _shape("حكايتي" if rtl else "Hikayati", rtl))
+        c.setFont(body_font, 11); c.setFillColorRGB(0.55, 0.55, 0.5)
+        c.drawCentredString(W / 2, 24, str(i + 1))
         c.showPage()
 
     # ---- Moral / closing ----
     if moral:
         c.setFillColorRGB(0.51, 0.70, 0.60)
         c.rect(0, 0, W, H, fill=1, stroke=0)
-        c.setFont(bold_font, 24)
-        c.setFillColorRGB(1, 1, 1)
-        shaped_moral = _shape(moral, rtl)
-        lines = _wrap(c, shaped_moral, bold_font, 24, W - 2 * margin)
+        c.setFont(body_font, 40); c.setFillColorRGB(1, 1, 1)
+        c.drawCentredString(W / 2, H * 0.72, "★  ✿  ★")
+        c.setFont(bold_font, 24); c.setFillColorRGB(1, 1, 1)
+        lines = _wrap(c, moral, bold_font, 24, W - 2 * margin)
         y = H / 2 + len(lines) * 18
         for line in lines:
-            c.drawCentredString(W / 2, y, line)
+            c.drawCentredString(W / 2, y, _shape(line, rtl))
             y -= 36
+        c.setFont(bold_font, 16)
+        c.drawCentredString(W / 2, H * 0.2, _shape("حكايتي" if rtl else "Hikayati", rtl))
         c.showPage()
 
     c.save()
@@ -127,25 +149,25 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
 
 
 def make_line_art(image_bytes: bytes) -> bytes:
-    """Convert a coloured illustration into a bold black-and-white coloring-book line drawing (PNG)."""
+    """Convert a coloured illustration into a clean medium-weight coloring-book line drawing (PNG)."""
     from PIL import Image, ImageFilter, ImageOps
     import numpy as np
     img = Image.open(io.BytesIO(image_bytes)).convert("L")
     img = ImageOps.autocontrast(img)
-    # denoise a little so soft watercolour areas don't speckle
-    smooth = img.filter(ImageFilter.MedianFilter(3))
-    # pencil-sketch (dodge) to lift line structure
+    # strong denoise first so soft watercolour areas don't produce speckle noise
+    smooth = img.filter(ImageFilter.MedianFilter(5)).filter(ImageFilter.GaussianBlur(1.2))
     inv = ImageOps.invert(smooth)
-    blur = inv.filter(ImageFilter.GaussianBlur(10))
+    blur = inv.filter(ImageFilter.GaussianBlur(12))
     g = np.asarray(smooth, dtype=np.float32)
     b = np.asarray(blur, dtype=np.float32)
     sketch = np.minimum(255.0, g * 255.0 / np.maximum(255.0 - b, 1.0))
-    # emphasise real edges
     edges = np.asarray(smooth.filter(ImageFilter.FIND_EDGES), dtype=np.float32)
-    combined = np.clip(sketch - edges * 1.4, 0, 255)
-    # crisp threshold -> bold pure-black outlines on white
-    out = np.where(combined < 205, 0, 255).astype("uint8")
-    result = Image.fromarray(out, "L").filter(ImageFilter.MinFilter(3))  # thicken lines slightly
+    combined = np.clip(sketch - edges * 1.2, 0, 255)
+    # higher threshold keeps only confident outlines (removes faint background noise)
+    out = np.where(combined < 165, 0, 255).astype("uint8")
+    result = Image.fromarray(out, "L")
+    # clean isolated specks, then give medium line weight
+    result = result.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.MinFilter(3))
     buf = io.BytesIO()
     result.convert("RGB").save(buf, "PNG")
     return buf.getvalue()
