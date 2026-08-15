@@ -139,9 +139,41 @@ export default function Track() {
                 )}
               </div>
             )}
+
+            <SupportBox orderId={order.id} t={t} />
           </>
         )}
       </div>
     </div>
   );
 }
+
+const SupportBox = ({ orderId, t }) => {
+  const [name, setName] = useState("");
+  const [msg, setMsg] = useState("");
+  const [list, setList] = useState([]);
+  const load = useCallback(() => { api.get(`/tickets/${orderId}`).then(({ data }) => setList(data)).catch(() => {}); }, [orderId]);
+  useEffect(() => { load(); }, [load]);
+  const send = async () => {
+    if (!name.trim() || !msg.trim()) return;
+    await api.post("/tickets", { order_id: orderId, name, message: msg });
+    setMsg(""); load();
+  };
+  return (
+    <div className="soft-card p-6 mt-6" data-testid="support-box">
+      <h2 className="text-lg font-bold text-navy mb-3">{t("x.supportTitle")}</h2>
+      <div className="grid gap-2 mb-3">
+        <input data-testid="ticket-name" className="rounded-2xl border border-border px-4 py-2.5 outline-none focus:ring-2 focus:ring-terracotta/40" placeholder={t("x.yourName")} value={name} onChange={(e) => setName(e.target.value)} />
+        <textarea data-testid="ticket-message" rows={2} className="rounded-2xl border border-border px-4 py-2.5 outline-none focus:ring-2 focus:ring-terracotta/40" placeholder={t("x.yourMessage")} value={msg} onChange={(e) => setMsg(e.target.value)} />
+        <button onClick={send} data-testid="ticket-submit" className="self-start bg-terracotta text-white font-bold px-6 py-2.5 rounded-full">{t("x.sendTicket")}</button>
+      </div>
+      {list.map((tk) => (
+        <div key={tk.id} className="border-t border-border/50 py-2 text-sm">
+          <p className="text-ink/80">{tk.message}</p>
+          {tk.reply && <p className="mt-1 bg-sage/10 rounded-xl p-2 text-ink/80">{t("x.adminReply")}: {tk.reply}</p>}
+        </div>
+      ))}
+    </div>
+  );
+};
+

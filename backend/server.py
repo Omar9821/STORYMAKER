@@ -77,6 +77,140 @@ class StatusUpdateBody(BaseModel):
     note: Optional[str] = ""
 
 
+class Character(BaseModel):
+    name: str
+    age: int = 5
+    gender: str = "boy"
+    hair_color: str = ""
+    hair_type: str = ""
+    hair_length: str = ""
+    hobbies: str = ""
+    favorite_color: str = ""
+    favorite_food: str = ""
+    relation: str = ""
+    photo_path: str = ""
+    is_main: bool = False
+
+
+class Person(BaseModel):
+    name: str = ""
+    age: str = ""
+    relation: str = ""
+
+
+class OrderCreate(BaseModel):
+    characters: list[Character]
+    story_type: str
+    positive_behaviors: str = ""
+    negative_behaviors: str = ""
+    special_details: str = ""
+    language: str
+    language_level: str = "simple"
+    story_setting: list[str] = []
+    lives_with: str
+    mother_name: str = ""
+    mother_age: str = ""
+    father_name: str = ""
+    father_age: str = ""
+    mention_parents: bool = True
+    siblings: list[Person] = []
+    friends: list[Person] = []
+    quantity: int = 1
+    coupon_code: str = ""
+    customer_name: str
+    customer_phone: str
+    customer_email: str = ""
+    shipping_address: str
+    wilaya: str
+    consent: bool
+
+
+class CouponBody(BaseModel):
+    code: str
+    type: str = "percent"  # percent | fixed
+    value: float
+    max_uses: int = 0  # 0 = unlimited
+    expires_at: Optional[str] = None
+
+
+class SettingsBody(BaseModel):
+    base_price: int
+    extra_character_price: int
+
+
+class TicketBody(BaseModel):
+    order_id: str = ""
+    name: str
+    message: str
+
+
+class TicketReplyBody(BaseModel):
+    reply: str
+
+
+async def get_settings() -> dict:
+    s = await db.settings.find_one({"_id": "config"})
+    if not s:
+        s = {"_id": "config", "base_price": BOOK_PRICE, "extra_character_price": 250}
+        await db.settings.insert_one(s)
+    return s
+
+
+async def compute_coupon(code: str, subtotal: int):
+    if not code:
+        return 0, None
+    c = await db.coupons.find_one({"code": code.upper(), "active": True})
+    if not c:
+        return 0, None
+    if c.get("expires_at") and c["expires_at"] < now_iso():
+        return 0, None
+    if c.get("max_uses", 0) and c.get("used_count", 0) >= c["max_uses"]:
+        return 0, None
+    if c["type"] == "percent":
+        disc = int(subtotal * c["value"] / 100)
+    else:
+        disc = int(c["value"])
+    return min(disc, subtotal), c
+
+
+def build_story_context(o: OrderCreate) -> str:
+    main = o.characters[0]
+    parts = []
+    hair = " ".join(x for x in [main.hair_length, main.hair_color, main.hair_type] if x).strip()
+    if hair:
+        parts.append(f"hair: {hair}")
+    if main.hobbies:
+        parts.append(f"hobbies: {main.hobbies}")
+    if main.favorite_color:
+        parts.append(f"favorite colour: {main.favorite_color}")
+    if main.favorite_food:
+        parts.append(f"favorite food: {main.favorite_food}")
+    if o.positive_behaviors:
+        parts.append(f"gently reinforce these positive behaviours: {o.positive_behaviors}")
+    if o.negative_behaviors:
+        parts.append(f"gently and indirectly discourage: {o.negative_behaviors}")
+    if o.special_details:
+        parts.append(f"special details to include: {o.special_details}")
+    if o.story_setting:
+        parts.append(f"story takes place in: {', '.join(o.story_setting)}")
+    if o.lives_with:
+        parts.append(f"the child lives with: {o.lives_with}")
+    if o.mention_parents:
+        if o.mother_name:
+            parts.append(f"mother: {o.mother_name} ({o.mother_age})")
+        if o.father_name:
+            parts.append(f"father: {o.father_name} ({o.father_age})")
+    if o.siblings:
+        parts.append("siblings: " + ", ".join(f"{s.name} ({s.age})" for s in o.siblings if s.name))
+    if o.friends:
+        parts.append("friends/relatives: " + ", ".join(f"{s.name} ({s.age}, {s.relation})" for s in o.friends if s.name))
+    extra_chars = [c for c in o.characters[1:] if c.name]
+    if extra_chars:
+        parts.append("other main characters that appear throughout: " +
+                     ", ".join(f"{c.name} ({c.age}, {c.gender}, {c.relation})" for c in extra_chars))
+    return ". ".join(parts)
+
+
 # ---------------- Generation pipeline ----------------
 async def run_generation(order_id: str):
     try:
@@ -171,6 +305,96 @@ async def run_generation(order_id: str):
         await push_status(order_id, "failed", f"فشل التوليد: {str(e)[:200]}")
 
 
+# ---------------- Partial regeneration + versioning ----------------
+async def snapshot_version(order: dict):
+    version = {
+        "version": len(order.get("versions", [])) + 1,
+        "timestamp": now_iso(),
+        "story_title": order.get("story_title"),
+        "story_moral": order.get("story_moral"),
+        "cover_path": order.get("cover_path"),
+        "pages": order.get("pages", []),
+        "pdf_path": order.get("pdf_path"),
+        "coloring_pdf_path": order.get("coloring_pdf_path"),
+    }
+    await db.orders.update_one({"id": order["id"]}, {"$push": {"versions": version}})
+
+
+def _rebuild_pdfs(order: dict):
+    """Read current images from storage and rebuild story + coloring PDFs. Returns (pdf_bytes, coloring_bytes)."""
+    cover_bytes, _ = storage.get_object(order["cover_path"])
+    pdf_pages, line_pages = [], []
+    for p in order["pages"]:
+        img_bytes, _ = storage.get_object(p["image_path"])
+        pdf_pages.append({"text": p["text"], "image": img_bytes})
+        if p.get("coloring_path"):
+            line_bytes, _ = storage.get_object(p["coloring_path"])
+            line_pages.append(line_bytes)
+    pdf_bytes = pdf_service.build_book_pdf(
+        order.get("story_title", ""), order.get("story_moral", ""), pdf_pages, cover_bytes,
+        order["language"], order["child_name"])
+    coloring_bytes = pdf_service.build_coloring_pdf(order.get("story_title", ""), line_pages, order["language"])
+    return pdf_bytes, coloring_bytes
+
+
+async def regenerate_single_page(order_id: str, page_number: int):
+    try:
+        order = await db.orders.find_one({"id": order_id})
+        if not order or order.get("reference_photo_deleted"):
+            return
+        await snapshot_version(order)
+        await push_status(order_id, "generating", f"إعادة توليد الصفحة {page_number}")
+        ref_url = f"{BACKEND_PUBLIC_URL}/api/files/{order['reference_photo_path']}"
+        new_seed = (order.get("gen_seed") or 0) + page_number * 7 + uuid.uuid4().int % 1000
+        pages = order["pages"]
+        idx = next((i for i, p in enumerate(pages) if p["page_number"] == page_number), None)
+        if idx is None:
+            return
+        scene = pages[idx]["scene"]
+        img_bytes = await asyncio.to_thread(fal_service.generate_illustration_pulid, ref_url, scene, new_seed, False)
+        storage.put_object(pages[idx]["image_path"], img_bytes, "image/png")
+        line_bytes = pdf_service.make_line_art(img_bytes)
+        storage.put_object(pages[idx]["coloring_path"], line_bytes, "image/png")
+        order["pages"] = pages
+        pdf_bytes, coloring_bytes = _rebuild_pdfs(order)
+        storage.put_object(order["pdf_path"], pdf_bytes, "application/pdf")
+        storage.put_object(order["coloring_pdf_path"], coloring_bytes, "application/pdf")
+        await db.orders.update_one({"id": order_id}, {"$set": {"pages": pages}})
+        await push_status(order_id, "review", f"تمت إعادة توليد الصفحة {page_number}")
+    except Exception as e:
+        logger.exception(f"regen page failed: {e}")
+        await push_status(order_id, "review", f"فشل إعادة توليد الصفحة: {str(e)[:120]}")
+
+
+async def regenerate_text_only(order_id: str):
+    try:
+        order = await db.orders.find_one({"id": order_id})
+        if not order:
+            return
+        await snapshot_version(order)
+        await push_status(order_id, "generating", "إعادة صياغة نص القصة")
+        story = await ai_service.generate_story(
+            order["child_name"], order["child_age"], order["child_gender"],
+            order["story_type"], order.get("behavior_focus", ""), order["language"],
+            extra_context=order.get("extra_context", ""), level=order.get("story_level", "simple"))
+        pages = order["pages"]
+        for i, p in enumerate(pages):
+            if i < len(story["pages"]):
+                p["text"] = story["pages"][i]["text"]
+        order["pages"] = pages
+        order["story_title"] = story["title"]
+        order["story_moral"] = story.get("moral", "")
+        pdf_bytes, coloring_bytes = _rebuild_pdfs(order)
+        storage.put_object(order["pdf_path"], pdf_bytes, "application/pdf")
+        storage.put_object(order["coloring_pdf_path"], coloring_bytes, "application/pdf")
+        await db.orders.update_one({"id": order_id}, {"$set": {
+            "pages": pages, "story_title": story["title"], "story_moral": story.get("moral", "")}})
+        await push_status(order_id, "review", "تمت إعادة صياغة النص")
+    except Exception as e:
+        logger.exception(f"regen text failed: {e}")
+        await push_status(order_id, "review", f"فشل إعادة صياغة النص: {str(e)[:120]}")
+
+
 # ---------------- Public routes ----------------
 @api.get("/")
 async def root():
@@ -179,7 +403,10 @@ async def root():
 
 @api.get("/config")
 async def config():
-    return {"price": BOOK_PRICE, "currency": "DZD", "payment_mock": payment_service.MOCK_MODE}
+    s = await get_settings()
+    return {"price": s["base_price"], "base_price": s["base_price"],
+            "extra_character_price": s["extra_character_price"],
+            "currency": "DZD", "payment_mock": payment_service.MOCK_MODE}
 
 
 @api.post("/orders/check-photo")
@@ -196,61 +423,104 @@ async def check_photo(file: UploadFile = File(...)):
     return {"ok": True, "width": w, "height": h, "message": "الصورة مناسبة"}
 
 
+@api.post("/orders/upload-photo")
+async def upload_photo(file: UploadFile = File(...)):
+    data = await file.read()
+    try:
+        img = Image.open(io.BytesIO(data))
+        w, h = img.size
+    except Exception:
+        return {"ok": False, "message": "الملف ليس صورة صالحة"}
+    if min(w, h) < 400:
+        return {"ok": False, "width": w, "height": h,
+                "message": "دقة الصورة منخفضة. استخدم صورة أوضح (400 بكسل على الأقل)"}
+    ext = (file.filename.split(".")[-1].lower() if "." in file.filename else "png")
+    ct = storage.MIME_TYPES.get(ext, "image/png")
+    path = f"{storage.APP_NAME}/references/{uuid.uuid4()}/photo.{ext}"
+    storage.put_object(path, data, ct)
+    return {"ok": True, "path": path, "width": w, "height": h, "message": "الصورة مناسبة"}
+
+
+@api.post("/orders/validate-coupon")
+async def validate_coupon(body: dict):
+    code = (body.get("code") or "").strip()
+    subtotal = int(body.get("subtotal") or 0)
+    disc, c = await compute_coupon(code, subtotal)
+    if not c:
+        return {"valid": False, "discount": 0}
+    return {"valid": True, "discount": disc, "type": c["type"], "value": c["value"]}
+
+
 @api.post("/orders")
-async def create_order(
-    child_name: str = Form(...),
-    child_age: int = Form(...),
-    child_gender: str = Form(...),
-    story_type: str = Form(...),
-    behavior_focus: str = Form(""),
-    language: str = Form(...),
-    customer_name: str = Form(...),
-    customer_phone: str = Form(...),
-    customer_email: str = Form(""),
-    shipping_address: str = Form(...),
-    wilaya: str = Form(...),
-    consent: bool = Form(...),
-    photo: UploadFile = File(...),
-):
-    if not consent:
+async def create_order(body: OrderCreate):
+    if not body.consent:
         raise HTTPException(status_code=400, detail="الموافقة على سياسة الخصوصية مطلوبة")
+    if not body.characters or not body.characters[0].name or not body.characters[0].photo_path:
+        raise HTTPException(status_code=400, detail="الشخصية الأساسية وصورتها مطلوبة")
+
+    settings = await get_settings()
+    n_extra = max(0, len(body.characters) - 1)
+    unit = settings["base_price"] + n_extra * settings["extra_character_price"]
+    subtotal = unit * max(1, body.quantity)
+    discount, coupon = await compute_coupon(body.coupon_code, subtotal)
+    amount = subtotal - discount
 
     order_id = str(uuid.uuid4())
-    data = await photo.read()
-    ext = (photo.filename.split(".")[-1].lower() if "." in photo.filename else "png")
-    ct = storage.MIME_TYPES.get(ext, "image/png")
-    ref_path = f"{storage.APP_NAME}/references/{order_id}/photo.{ext}"
-    storage.put_object(ref_path, data, ct)
+    main = body.characters[0]
+    behavior_focus = "; ".join(x for x in [body.positive_behaviors, body.negative_behaviors] if x)
 
     order = {
         "id": order_id,
-        "child_name": child_name,
-        "child_age": child_age,
-        "child_gender": child_gender,
-        "story_type": story_type,
+        "characters": [c.model_dump() for c in body.characters],
+        "child_name": main.name,
+        "child_age": main.age,
+        "child_gender": main.gender,
+        "story_type": body.story_type,
         "behavior_focus": behavior_focus,
-        "language": language,
-        "customer_name": customer_name,
-        "customer_phone": customer_phone,
-        "customer_email": customer_email,
-        "shipping_address": shipping_address,
-        "wilaya": wilaya,
+        "positive_behaviors": body.positive_behaviors,
+        "negative_behaviors": body.negative_behaviors,
+        "special_details": body.special_details,
+        "language": body.language,
+        "story_level": body.language_level,
+        "story_setting": body.story_setting,
+        "extra_context": build_story_context(body),
+        "lives_with": body.lives_with,
+        "mother_name": body.mother_name, "mother_age": body.mother_age,
+        "father_name": body.father_name, "father_age": body.father_age,
+        "mention_parents": body.mention_parents,
+        "siblings": [s.model_dump() for s in body.siblings],
+        "friends": [s.model_dump() for s in body.friends],
+        "quantity": max(1, body.quantity),
+        "customer_name": body.customer_name,
+        "customer_phone": body.customer_phone,
+        "customer_email": body.customer_email,
+        "shipping_address": body.shipping_address,
+        "wilaya": body.wilaya,
         "consent": True,
         "consent_at": now_iso(),
-        "reference_photo_path": ref_path,
+        "reference_photo_path": main.photo_path,
         "reference_photo_deleted": False,
-        "amount": BOOK_PRICE,
+        "base_price": settings["base_price"],
+        "extra_characters": n_extra,
+        "extra_character_price": settings["extra_character_price"],
+        "subtotal": subtotal,
+        "coupon_code": (body.coupon_code or "").upper() if coupon else "",
+        "discount": discount,
+        "amount": amount,
         "currency": "DZD",
         "payment_method": None,
         "payment_status": "pending",
         "status": "awaiting_payment",
         "status_history": [{"status": "awaiting_payment", "note": "تم إنشاء الطلب", "timestamp": now_iso()}],
         "pages": [],
+        "versions": [],
         "ai_cost_usd": 0,
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
     await db.orders.insert_one(order)
+    if coupon:
+        await db.coupons.update_one({"code": coupon["code"]}, {"$inc": {"used_count": 1}})
     return public_order(order)
 
 
@@ -354,17 +624,42 @@ async def admin_list_orders(payload: dict = Depends(auth.require_admin), status:
 
 @api.get("/admin/stats")
 async def admin_stats(payload: dict = Depends(auth.require_admin)):
-    orders = await db.orders.find({}).to_list(1000)
+    orders = await db.orders.find({}).to_list(2000)
     total_cost = sum(o.get("ai_cost_usd", 0) for o in orders)
-    by_status = {}
+    by_status, by_type, by_behavior = {}, {}, {}
+    revenue = 0
+    from datetime import date
+    today = date.today().isoformat()
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    month_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    rev_today = rev_week = rev_month = 0
     for o in orders:
         by_status[o["status"]] = by_status.get(o["status"], 0) + 1
-    revenue = sum(o["amount"] for o in orders if o.get("payment_status") in ("paid", "cod_pending"))
+        by_type[o.get("story_type", "?")] = by_type.get(o.get("story_type", "?"), 0) + 1
+        for b in filter(None, [o.get("positive_behaviors"), o.get("negative_behaviors")]):
+            by_behavior[b] = by_behavior.get(b, 0) + 1
+        if o.get("payment_status") in ("paid", "cod_pending"):
+            amt = o.get("amount", 0)
+            revenue += amt
+            created = o.get("created_at", "")
+            if created[:10] == today:
+                rev_today += amt
+            if created >= week_ago:
+                rev_week += amt
+            if created >= month_ago:
+                rev_month += amt
+    paid = [o for o in orders if o.get("payment_status") in ("paid", "cod_pending")]
+    aov = round(revenue / len(paid)) if paid else 0
+    top_behaviors = sorted(by_behavior.items(), key=lambda x: -x[1])[:5]
     return {
         "total_orders": len(orders),
         "total_ai_cost_usd": round(total_cost, 2),
         "revenue_dzd": revenue,
+        "revenue_today": rev_today, "revenue_week": rev_week, "revenue_month": rev_month,
+        "avg_order_value": aov,
         "by_status": by_status,
+        "by_type": by_type,
+        "top_behaviors": top_behaviors,
     }
 
 
@@ -418,6 +713,85 @@ async def admin_privacy_logs(payload: dict = Depends(auth.require_admin)):
     return logs
 
 
+@api.get("/admin/settings")
+async def admin_get_settings(payload: dict = Depends(auth.require_admin)):
+    s = await get_settings()
+    return {"base_price": s["base_price"], "extra_character_price": s["extra_character_price"]}
+
+
+@api.put("/admin/settings")
+async def admin_put_settings(body: SettingsBody, payload: dict = Depends(auth.require_admin)):
+    await db.settings.update_one({"_id": "config"}, {"$set": {
+        "base_price": body.base_price, "extra_character_price": body.extra_character_price}}, upsert=True)
+    return {"ok": True}
+
+
+@api.get("/admin/coupons")
+async def admin_list_coupons(payload: dict = Depends(auth.require_admin)):
+    return await db.coupons.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api.post("/admin/coupons")
+async def admin_create_coupon(body: CouponBody, payload: dict = Depends(auth.require_admin)):
+    doc = {"code": body.code.upper(), "type": body.type, "value": body.value,
+           "max_uses": body.max_uses, "used_count": 0, "expires_at": body.expires_at,
+           "active": True, "created_at": now_iso()}
+    await db.coupons.update_one({"code": doc["code"]}, {"$set": doc}, upsert=True)
+    return {"ok": True}
+
+
+@api.delete("/admin/coupons/{code}")
+async def admin_delete_coupon(code: str, payload: dict = Depends(auth.require_admin)):
+    await db.coupons.update_one({"code": code.upper()}, {"$set": {"active": False}})
+    return {"ok": True}
+
+
+@api.post("/admin/orders/{order_id}/regenerate-page/{page_number}")
+async def admin_regenerate_page(order_id: str, page_number: int, payload: dict = Depends(auth.require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    if order.get("reference_photo_deleted"):
+        raise HTTPException(status_code=400, detail="تم حذف صورة المرجع")
+    asyncio.create_task(regenerate_single_page(order_id, page_number))
+    return {"ok": True}
+
+
+@api.post("/admin/orders/{order_id}/regenerate-text")
+async def admin_regenerate_text(order_id: str, payload: dict = Depends(auth.require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    asyncio.create_task(regenerate_text_only(order_id))
+    return {"ok": True}
+
+
+@api.post("/tickets")
+async def create_ticket(body: TicketBody):
+    ticket = {"id": str(uuid.uuid4()), "order_id": body.order_id, "name": body.name,
+              "message": body.message, "status": "open", "reply": None, "created_at": now_iso()}
+    await db.tickets.insert_one(ticket)
+    ticket.pop("_id", None)
+    return ticket
+
+
+@api.get("/tickets/{order_id}")
+async def order_tickets(order_id: str):
+    return await db.tickets.find({"order_id": order_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+
+
+@api.get("/admin/tickets")
+async def admin_tickets(payload: dict = Depends(auth.require_admin)):
+    return await db.tickets.find({}, {"_id": 0}).sort("created_at", -1).to_list(300)
+
+
+@api.post("/admin/tickets/{ticket_id}/reply")
+async def admin_reply_ticket(ticket_id: str, body: TicketReplyBody, payload: dict = Depends(auth.require_admin)):
+    await db.tickets.update_one({"id": ticket_id}, {"$set": {
+        "reply": body.reply, "status": "answered", "replied_at": now_iso()}})
+    return {"ok": True}
+
+
 # ---------------- App wiring ----------------
 app.include_router(api)
 app.add_middleware(
@@ -437,7 +811,10 @@ async def startup():
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
     await auth.seed_admin(db)
+    await get_settings()
     await db.orders.create_index("id", unique=True)
+    await db.coupons.create_index("code", unique=True)
+    await db.tickets.create_index("order_id")
     logger.info("Startup complete")
 
 

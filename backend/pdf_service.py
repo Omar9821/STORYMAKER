@@ -127,22 +127,27 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
 
 
 def make_line_art(image_bytes: bytes) -> bytes:
-    """Convert a coloured illustration into a black-and-white coloring-book line drawing (PNG)."""
+    """Convert a coloured illustration into a bold black-and-white coloring-book line drawing (PNG)."""
     from PIL import Image, ImageFilter, ImageOps
+    import numpy as np
     img = Image.open(io.BytesIO(image_bytes)).convert("L")
     img = ImageOps.autocontrast(img)
-    gray = img
-    inv = ImageOps.invert(gray)
-    blur = inv.filter(ImageFilter.GaussianBlur(12))
-    # colour dodge blend -> pencil sketch on white
-    import numpy as np
-    g = np.asarray(gray, dtype=np.float32)
+    # denoise a little so soft watercolour areas don't speckle
+    smooth = img.filter(ImageFilter.MedianFilter(3))
+    # pencil-sketch (dodge) to lift line structure
+    inv = ImageOps.invert(smooth)
+    blur = inv.filter(ImageFilter.GaussianBlur(10))
+    g = np.asarray(smooth, dtype=np.float32)
     b = np.asarray(blur, dtype=np.float32)
     sketch = np.minimum(255.0, g * 255.0 / np.maximum(255.0 - b, 1.0))
-    out = Image.fromarray(sketch.astype("uint8"), "L")
-    out = ImageOps.autocontrast(out)
+    # emphasise real edges
+    edges = np.asarray(smooth.filter(ImageFilter.FIND_EDGES), dtype=np.float32)
+    combined = np.clip(sketch - edges * 1.4, 0, 255)
+    # crisp threshold -> bold pure-black outlines on white
+    out = np.where(combined < 205, 0, 255).astype("uint8")
+    result = Image.fromarray(out, "L").filter(ImageFilter.MinFilter(3))  # thicken lines slightly
     buf = io.BytesIO()
-    out.convert("RGB").save(buf, "PNG")
+    result.convert("RGB").save(buf, "PNG")
     return buf.getvalue()
 
 

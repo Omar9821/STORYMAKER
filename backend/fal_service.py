@@ -36,7 +36,8 @@ def _trusted(url: str) -> str:
     return url
 
 
-def _get_retry(url, timeout, attempts=6):
+def _get_retry(url, timeout, attempts=10):
+    import random
     delay = 2
     last = None
     for i in range(attempts):
@@ -44,17 +45,17 @@ def _get_retry(url, timeout, attempts=6):
             r = requests.get(url, headers=_headers(), timeout=timeout)
             if r.status_code in (502, 503, 504):
                 last = r
-                time.sleep(delay); delay = min(delay * 2, 15); continue
+                time.sleep(delay + random.uniform(0, 1.5)); delay = min(delay * 2, 20); continue
             return r
         except (requests.ConnectTimeout, requests.ReadTimeout, requests.ConnectionError) as e:
             last = e
-            time.sleep(delay); delay = min(delay * 2, 15)
+            time.sleep(delay + random.uniform(0, 1.5)); delay = min(delay * 2, 20)
     if isinstance(last, requests.Response):
         return last
     raise FalError(f"GET failed after retries: {last}")
 
 
-def run_media_generation(endpoint_id: str, payload: dict, timeout_seconds: int = 300) -> dict:
+def run_media_generation(endpoint_id: str, payload: dict, timeout_seconds: int = 480) -> dict:
     submit = None
     delay = 3
     for _ in range(5):
@@ -80,6 +81,10 @@ def run_media_generation(endpoint_id: str, payload: dict, timeout_seconds: int =
         status = (st.json().get("status") or "").upper()
         if status in {"COMPLETED", "OK"}:
             res = _get_retry(response_url, 60)
+            if res.status_code in (502, 503, 504):
+                # result briefly unavailable behind the gateway; keep re-polling within deadline
+                time.sleep(4)
+                continue
             res.raise_for_status()
             return res.json()
         if status in {"FAILED", "CANCELLED", "CANCELED", "ERROR"}:

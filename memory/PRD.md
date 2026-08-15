@@ -26,18 +26,12 @@
 ### RESOLVED (was P0 blocker — Section 13)
 - Emergent Gemini/OpenAI image endpoints **refuse to transform real human photos** → produced generic children. Switched illustrations to **fal-ai/flux-pulid** (accepts real face photo as reference_image_url, preserves identity, cartoon style). Sample regenerated and confirmed.
 
-## Backlog (from user's expanded spec — awaiting confirmation)
-### P1 — Section 14: Expanded Wizard data model (qessati-parity)
-- Multiple main characters (price per extra char, admin-set); per child: hair color/type/length, hobbies, favorite color, favorite healthy food.
-- Educational goal: positive behaviors (1-2), negative behaviors (1-2), special details free text.
-- Story settings: language level (simple/medium/advanced), setting (home/school/parks/fantasy multi-select).
-- Family context: who child lives with (required), parents names+ages (opt), mention parents y/n, siblings/friends/relatives names+ages.
-- Order options: quantity, Shariah-compliant installment option (Algerian provider).
-
-### P1 — Section 16: Full admin
-- Pricing management (edit base price + addons from UI), coupons (%/fixed, max uses, expiry), seasonal offers.
-- Orders filter/search; per-part regeneration (text only / single scene / coloring) with version history.
-- Support tickets; analytics/reports; multi-level roles; audit log.
+## Backlog (from user's expanded spec)
+### DONE (2026-06, this iteration)
+- **Section 14** — Expanded Wizard (5 steps): multiple characters (**250 DZD/extra**, admin-set), per-main-char hair color/type/length, hobbies, favorite color/food; positive/negative behaviors + special details; language level (simple/medium/advanced); story setting multi-select (home/school/parks/fantasy); family context (lives_with required, parents, siblings, friends); quantity + coupon + live price summary. Order API moved to JSON + separate /orders/upload-photo. All fields fed into Claude story context.
+- **Section 16** — Admin: editable base_price + extra_character_price from UI; coupons CRUD (%/fixed, max uses, expiry) + validate-coupon; support tickets (customer submit on Track, admin reply); sales reports (today/week/month revenue, AOV, by story-type, top behaviors); partial regeneration (regenerate-text / regenerate-page/{n}) with version-history snapshots; per-page regen buttons + PDF/coloring links in order drawer.
+- **Bolder coloring line-art** (FIND_EDGES + threshold + MinFilter for crisp black outlines).
+- Verified: pricing math, coupons, tickets, stats, admin guards, wizard 5 steps, admin tabs all GREEN (testing agent iteration_3). fal PuLID result-fetch hardened against transient 502.
 
 ### P2
 - Real Chargily key (leave mock now), print-partner API later, art-style selector, video/audio upsell (deferred).

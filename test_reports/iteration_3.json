@@ -1,0 +1,45 @@
+{
+  "summary": "Hikayati: 27/31 backend tests pass (JSON order API, coupons, settings, tickets, stats, admin auth guards, photo upload). 4 tests fail — all 4 are downstream of a persistent upstream 502 Bad Gateway from Emergent's fal-pulid integration proxy (https://integrations.emergentagent.com/api/v1/fal/queue/fal-ai/flux-pulid/requests/{id}). Retry logic (6 attempts on GET, 5 on submit) already exists in fal_service.py but the 502 persists across two full runs. Frontend Wizard (all 5 steps), Admin Dashboard (tabs orders/pricing/tickets/reports), coupon+pricing UI, order drawer (act-regen-text, regen-page-N, PDF + coloring links), and Track SupportBox all work as specified.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "fal_service.run_media_generation -> integrations.emergentagent.com fal-pulid response fetch", "issue": "Persistent 502 Bad Gateway on /api/v1/fal/queue/fal-ai/flux-pulid/requests/{id} even after 6 retries. Reproduced twice (2026-08-15 12:24 and 12:30). Every new order enters 'generating' and ends with status 'failed'. Blocks the entire book generation pipeline (cover, pages, PDF, coloring PDF, versions).", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminDashboard order drawer", "issue": "Drawer overlay (fixed inset-0 bg-black/40 z-50) sometimes intercepts pointer events when trying to close via top-right button; act-approve buttons in the same header area were clicked accidentally in automation. Consider explicit data-testid='drawer-close' + higher z-index for the close button.", "selector": "AdminDashboard.jsx L174 overlay div", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Full order -> AI generation -> review", "issue": "Cannot complete due to upstream fal-pulid 502 (see backend critical)", "affected_selectors": ["view-order-{id}", "act-regen-text", "regen-page-{n}"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_fast.xml"
+  ],
+  "action_items": [
+    "URGENT: Investigate why Emergent fal-pulid integration proxy returns persistent 502 Bad Gateway on the response fetch step (not submit) — reproduces on every new order. Check EMERGENT_LLM_KEY quota/credits or integration proxy health. If credits are exhausted, fal returns 402 elsewhere; here it's 502 which points to proxy/gateway issue. Consider raising with Emergent infra team.",
+    "Consider adding data-testid='drawer-close' and increasing close button z-index over overlay to reduce automation flakiness (LOW).",
+    "The older /api/orders multipart contract in existing tests has been replaced with the new JSON contract + separate /orders/upload-photo — backend_test.py is now updated accordingly."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 823 lines — starting to grow; consider splitting admin/orders/tickets into separate router modules.",
+    "run_generation swallows exceptions (except Exception) and marks order 'failed' — good, but the 502 from a specific request URL leaves storage in inconsistent state (partial cover.png may have been written before failure). Consider cleanup on failure.",
+    "In fal_service._get_retry the exponential backoff maxes at 15s — for a 502 storm this yields ~90s total wait; may want a longer backoff or circuit-breaker.",
+    "run_media_generation submits with 5 retries but response fetch shares the same _get_retry loop — status polling succeeded (HTTP 200) but response fetch 502'd; the response fetch could also be retried at a higher layer.",
+    "public_order() properly excludes _id and reference_photo_b64 — good.",
+    "compute_coupon returns (0, None) on missing code — fine. Ensure coupon.used_count increment is atomic (it is via $inc)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (rewritten for new JSON order API + coupons + settings + tickets + stats + regen/versions)"
+  ],
+  "success_rate": {"backend": "27/31 (87%) — 4 failures all rooted in one upstream fal 502", "frontend": "100% of tested selectors present; admin dashboard, wizard, drawer, track support box all functional"},
+  "test_credentials": "admin@hikayati.dz / Hikayati@2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Coupon TESTPCT10 (10% percent, active) created via /api/admin/coupons; multiple TEST_ prefixed orders created in DB (TEST_Sara, TEST_Regen, TEST_TicketOrder, TEST_Adam). Ticket 'TrackerTest -> hello from track' created via public SupportBox on /track/{id}.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend JSON order API (multi-character + coupon + pricing math + tickets + settings + stats + admin guards) is FULLY GREEN — do not spend time re-testing those unless code changes. The single blocker is fal-pulid 502 from integrations.emergentagent.com. If that is resolved (or fal_service falls back to a different endpoint), re-run TestGenerationAndRegen (pytest /app/backend/tests/backend_test.py::TestGenerationAndRegen -v) — allow up to 6 minutes per test since real AI is slow. Ticket-reply/send widgets in Admin Tickets tab only render for status=='open' tickets (both existing tickets are already 'answered'), so create a fresh public ticket via POST /api/tickets first if you want to verify the reply UI.",
+  "rca of the issue": "TestGenerationAndRegen::test_poll_until_review fails because run_generation() throws 502 HTTPError from fal_service.run_media_generation when fetching the fal-pulid RESULT (not status). Stack: server.py:237 (cover_bytes = fal_service.generate_illustration_pulid) -> fal_service.py:117 -> fal_service.py:83 res.raise_for_status(). Both attempts hit the same endpoint pattern: https://integrations.emergentagent.com/api/v1/fal/queue/fal-ai/flux-pulid/requests/{request-id}. Retry logic (6x with backoff) already runs. Mitigation: check EMERGENT_LLM_KEY credit balance, verify integration proxy health, potentially fall back to standard flux endpoint or add a longer retry window with jitter."
+}
