@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   SignOut, Package, Coins, ChartBar, X, ArrowClockwise, CheckCircle, Truck, Printer,
-  FilePdf, Trash, BookOpenText, ClockCounterClockwise, TextT, Ticket, Tag, ChartLineUp, CaretDown,
+  FilePdf, Trash, BookOpenText, ClockCounterClockwise, TextT, Ticket, Tag, ChartLineUp, CaretDown, MagnifyingGlass,
 } from "@phosphor-icons/react";
 import { api, fileUrl } from "../lib/api";
 
@@ -13,6 +13,9 @@ const STATUS_COLORS = {
   review: "bg-sand/50 text-navy", approved: "bg-sage/25 text-sage", printing: "bg-navy/10 text-navy",
   shipped: "bg-sage/30 text-sage", delivered: "bg-sage text-white", failed: "bg-destructive/15 text-destructive",
 };
+
+const STATUS_LIST = ["awaiting_payment", "generating", "review", "approved", "printing", "shipped", "delivered", "failed"];
+const BULK_STATUS = ["approved", "printing", "shipped", "delivered"];
 
 export default function AdminDashboard() {
   const { t } = useTranslation();
@@ -26,6 +29,17 @@ export default function AdminDashboard() {
   const [selected, setSelected] = useState(null);
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent", value: 10, max_uses: 0 });
   const [expandedVer, setExpandedVer] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const loadOrders = useCallback(async (sf, sq) => {
+    const params = {};
+    if (sf) params.status = sf;
+    if (sq) params.search = sq;
+    const { data } = await api.get("/admin/orders", { params });
+    setOrders(data);
+  }, []);
 
   const loadAll = useCallback(async () => {
     try {
@@ -41,6 +55,18 @@ export default function AdminDashboard() {
     if (!localStorage.getItem("hikayati_token")) { navigate("/admin/login"); return; }
     loadAll();
   }, [loadAll, navigate]);
+
+  useEffect(() => {
+    const id = setTimeout(() => { loadOrders(statusFilter, search).catch(() => {}); }, 350);
+    return () => clearTimeout(id);
+  }, [statusFilter, search, loadOrders]);
+
+  const toggleSelect = (id) => setSelectedIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+  const toggleSelectAll = () => setSelectedIds((p) => p.length === orders.length ? [] : orders.map((o) => o.id));
+  const refreshOrders = async () => { await loadOrders(statusFilter, search); setSelectedIds([]); };
+  const delOrder = (id) => act(async () => { await api.delete(`/admin/orders/${id}`); await refreshOrders(); setSelected(null); }, t("x.deleted"));
+  const bulkDelete = () => act(async () => { await api.post("/admin/orders/bulk", { order_ids: selectedIds, action: "delete" }); await refreshOrders(); }, t("x.deleted"));
+  const bulkStatus = (status) => { if (!status) return; act(async () => { await api.post("/admin/orders/bulk", { order_ids: selectedIds, action: "status", status }); await refreshOrders(); }, status); };
 
   const openOrder = async (id) => { const { data } = await api.get(`/admin/orders/${id}`); setSelected(data); };
   const act = async (fn, msg) => {
@@ -76,25 +102,66 @@ export default function AdminDashboard() {
         </div>
 
         {tab === "orders" && (
-          <div className="soft-card overflow-x-auto">
-            <table className="w-full text-start" data-testid="orders-table">
-              <thead className="bg-muted/60 text-ink/60 text-sm"><tr>
-                <th className="p-4 text-start">{t("admin.child")}</th><th className="p-4 text-start">{t("admin.customer")}</th>
-                <th className="p-4 text-start">{t("track.status")}</th><th className="p-4 text-start">{t("admin.cost")}</th><th className="p-4 text-start">{t("admin.actions")}</th>
-              </tr></thead>
-              <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id} className="border-t border-border/60 hover:bg-cream/60">
-                    <td className="p-4 font-semibold text-navy">{o.child_name}<span className="block text-xs text-ink/40">{o.language?.toUpperCase()}</span></td>
-                    <td className="p-4 text-ink/70 text-sm">{o.customer_name}<span className="block text-xs text-ink/40">{o.wilaya}</span></td>
-                    <td className="p-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${STATUS_COLORS[o.status] || "bg-muted"}`}>{t(`track.st_${o.status}`)}</span></td>
-                    <td className="p-4 text-ink/70 text-sm">${o.ai_cost_usd || 0}</td>
-                    <td className="p-4"><button onClick={() => openOrder(o.id)} data-testid={`view-order-${o.id}`} className="text-terracotta font-bold hover:underline">{t("admin.view")}</button></td>
-                  </tr>
-                ))}
-                {orders.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-ink/40">—</td></tr>}
-              </tbody>
-            </table>
+          <div>
+            {/* filter bar */}
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="relative flex-1 min-w-[200px]">
+                <MagnifyingGlass size={16} className="absolute top-1/2 -translate-y-1/2 start-3 text-ink/40" />
+                <input data-testid="orders-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("x.searchPlaceholder")}
+                  className="w-full ps-9 pe-3 py-2.5 rounded-full border border-border bg-white outline-none focus:ring-2 focus:ring-terracotta/30 text-sm" />
+              </div>
+              <select data-testid="orders-status-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                className="py-2.5 px-4 rounded-full border border-border bg-white outline-none focus:ring-2 focus:ring-terracotta/30 text-sm font-semibold text-navy">
+                <option value="">{t("x.allStatuses")}</option>
+                {STATUS_LIST.map((s) => <option key={s} value={s}>{t(`track.st_${s}`)}</option>)}
+              </select>
+              <span className="text-xs text-ink/50" data-testid="orders-count">{orders.length}</span>
+            </div>
+
+            {/* bulk action bar */}
+            {selectedIds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 mb-3 bg-navy text-white rounded-2xl px-4 py-3" data-testid="bulk-bar">
+                <span className="font-bold text-sm">{selectedIds.length} {t("x.selected")}</span>
+                <select data-testid="bulk-status-select" defaultValue="" onChange={(e) => { bulkStatus(e.target.value); e.target.value = ""; }}
+                  className="py-2 px-3 rounded-full text-navy text-sm font-semibold outline-none">
+                  <option value="">{t("x.bulkStatus")}</option>
+                  {BULK_STATUS.map((s) => <option key={s} value={s}>{t(`track.st_${s}`)}</option>)}
+                </select>
+                <button data-testid="bulk-delete-btn" onClick={() => { if (window.confirm(t("x.confirmDeleteMany"))) bulkDelete(); }}
+                  className="inline-flex items-center gap-1.5 bg-destructive hover:bg-destructive/90 text-white text-sm font-bold px-3 py-2 rounded-full transition-colors">
+                  <Trash size={14} weight="bold" /> {t("x.bulkDelete")}
+                </button>
+                <button onClick={() => setSelectedIds([])} className="text-white/70 hover:text-white text-sm ms-auto">{t("x.clear")}</button>
+              </div>
+            )}
+
+            <div className="soft-card overflow-x-auto">
+              <table className="w-full text-start" data-testid="orders-table">
+                <thead className="bg-muted/60 text-ink/60 text-sm"><tr>
+                  <th className="p-4 w-10"><input type="checkbox" data-testid="select-all" checked={orders.length > 0 && selectedIds.length === orders.length} onChange={toggleSelectAll} className="w-4 h-4 accent-terracotta" /></th>
+                  <th className="p-4 text-start">{t("admin.child")}</th><th className="p-4 text-start">{t("admin.customer")}</th>
+                  <th className="p-4 text-start">{t("track.status")}</th><th className="p-4 text-start">{t("admin.cost")}</th><th className="p-4 text-start">{t("admin.actions")}</th>
+                </tr></thead>
+                <tbody>
+                  {orders.map((o) => (
+                    <tr key={o.id} className={`border-t border-border/60 hover:bg-cream/60 ${selectedIds.includes(o.id) ? "bg-terracotta/5" : ""}`}>
+                      <td className="p-4"><input type="checkbox" data-testid={`select-${o.id}`} checked={selectedIds.includes(o.id)} onChange={() => toggleSelect(o.id)} className="w-4 h-4 accent-terracotta" /></td>
+                      <td className="p-4 font-semibold text-navy">{o.child_name}<span className="block text-xs text-ink/40">{o.language?.toUpperCase()}</span></td>
+                      <td className="p-4 text-ink/70 text-sm">{o.customer_name}<span className="block text-xs text-ink/40">{o.wilaya}</span></td>
+                      <td className="p-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${STATUS_COLORS[o.status] || "bg-muted"}`}>{t(`track.st_${o.status}`)}</span></td>
+                      <td className="p-4 text-ink/70 text-sm">${o.ai_cost_usd || 0}</td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => openOrder(o.id)} data-testid={`view-order-${o.id}`} className="text-terracotta font-bold hover:underline">{t("admin.view")}</button>
+                          <button onClick={() => { if (window.confirm(t("x.confirmDelete"))) delOrder(o.id); }} data-testid={`delete-order-${o.id}`} className="text-destructive/70 hover:text-destructive" title={t("x.delete")}><Trash size={16} weight="bold" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {orders.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-ink/40">—</td></tr>}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -199,6 +266,7 @@ export default function AdminDashboard() {
               <ActBtn onClick={() => setStatus(selected.id, "shipped")} icon={Truck} label={t("admin.markShipped")} testid="act-shipped" />
               <ActBtn onClick={() => setStatus(selected.id, "delivered")} icon={FilePdf} label={t("admin.markDelivered")} testid="act-delivered" />
               <ActBtn onClick={() => act(() => api.delete(`/admin/orders/${selected.id}/reference-photo`), "deleted")} icon={Trash} label={t("admin.deletePhoto")} danger testid="act-delete-photo" />
+              <ActBtn onClick={() => { if (window.confirm(t("x.confirmDelete"))) delOrder(selected.id); }} icon={Trash} label={t("x.delete")} danger testid="act-delete-order" />
             </div>
 
             {selected.pages?.length > 0 && (

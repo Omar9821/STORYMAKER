@@ -34,6 +34,11 @@
 - Verified: pricing math, coupons, tickets, stats, admin guards, wizard 5 steps, admin tabs all GREEN (testing agent iteration_3). fal PuLID result-fetch hardened against transient 502.
 
 ### DONE (2026-06, latest iteration)
+- **Manual/COD payment only** — online Chargily disabled (pay endpoint returns 400 for non-cod). New lifecycle: wizard submit → order `awaiting_payment`/`pending` (NO auto-generation) → customer sees "order received, we'll call you" (Track `order-received-box`) → admin phones to confirm → admin presses **توليد** (`/admin/orders/{id}/regenerate`) which sets `cod`/`cod_pending` and starts generation. Payment status shown in admin drawer.
+- **Order management** — single delete (`DELETE /admin/orders/{id}`), bulk actions (`POST /admin/orders/bulk` with action delete|status), and list filters (`GET /admin/orders?status=&search=` on customer_name/phone/child_name). Admin UI: search box + status dropdown + select-all/per-row checkboxes + bulk bar (change status / delete selected) + per-row & drawer delete buttons. Verified via curl + screenshot.
+- **Test data cleanup** — deleted 19 test orders; only the 2 real orders (عمر, محمد) remain.
+
+
 - **RTL PDF line ordering (Item 17-a)** — VERIFIED: `draw_text_block` wraps logical Arabic text first, then reshapes+bidi per line. Visual check (analyze_file_tool) confirms all lines read top-to-bottom correctly. No backend regression (testing iteration_5: 16/16 pass).
 - **Version rollback (Item 16 completion)** — Admin can now RESTORE any previous version. `regenerate_single_page` writes images to NEW versioned paths (`page_{n}_{tag}.png`) so prior images survive; `restore_version_task` snapshots current state (reversible), restores story_title/moral/pages/cover, rebuilds both PDFs. New endpoint `POST /admin/orders/{id}/restore-version/{version_num}` (guards: 401 unauth, 404 missing order/version). UI: restore button per version in order drawer (`data-testid=restore-version-{v}`).
 - **Version preview (admin)** — each version row in the order drawer is expandable (`version-toggle-{v}`) showing cover + page thumbnails + text + title/moral, so admin can compare visually before restoring.

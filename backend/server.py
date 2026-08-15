@@ -10,7 +10,7 @@ import base64
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import FastAPI, APIRouter, UploadFile, File, Form, Request, Depends, HTTPException, Response
 from starlette.middleware.cors import CORSMiddleware
@@ -74,6 +74,13 @@ class PayBody(BaseModel):
 
 class StatusUpdateBody(BaseModel):
     status: str
+    note: Optional[str] = ""
+
+
+class BulkActionBody(BaseModel):
+    order_ids: List[str]
+    action: str  # "delete" | "status"
+    status: Optional[str] = None
     note: Optional[str] = ""
 
 
@@ -648,8 +655,13 @@ async def admin_me(payload: dict = Depends(auth.require_admin)):
 
 
 @api.get("/admin/orders")
-async def admin_list_orders(payload: dict = Depends(auth.require_admin), status: Optional[str] = None):
-    q = {"status": status} if status else {}
+async def admin_list_orders(payload: dict = Depends(auth.require_admin), status: Optional[str] = None, search: Optional[str] = None):
+    q = {}
+    if status:
+        q["status"] = status
+    if search:
+        rx = {"$regex": search, "$options": "i"}
+        q["$or"] = [{"customer_name": rx}, {"customer_phone": rx}, {"child_name": rx}]
     orders = await db.orders.find(q).sort("created_at", -1).to_list(500)
     return [public_order(o) for o in orders]
 
@@ -701,6 +713,33 @@ async def admin_get_order(order_id: str, payload: dict = Depends(auth.require_ad
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     return public_order(order)
+
+
+@api.delete("/admin/orders/{order_id}")
+async def admin_delete_order(order_id: str, payload: dict = Depends(auth.require_admin)):
+    res = await db.orders.delete_one({"id": order_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    return {"ok": True, "deleted": res.deleted_count}
+
+
+@api.post("/admin/orders/bulk")
+async def admin_bulk_orders(body: BulkActionBody, payload: dict = Depends(auth.require_admin)):
+    if not body.order_ids:
+        raise HTTPException(status_code=400, detail="لم يتم تحديد أي طلب")
+    if body.action == "delete":
+        res = await db.orders.delete_many({"id": {"$in": body.order_ids}})
+        return {"ok": True, "deleted": res.deleted_count}
+    if body.action == "status":
+        if not body.status:
+            raise HTTPException(status_code=400, detail="الحالة مطلوبة")
+        count = 0
+        for oid in body.order_ids:
+            if await db.orders.find_one({"id": oid}):
+                await push_status(oid, body.status, body.note or "")
+                count += 1
+        return {"ok": True, "updated": count}
+    raise HTTPException(status_code=400, detail="إجراء غير معروف")
 
 
 @api.post("/admin/orders/{order_id}/status")
