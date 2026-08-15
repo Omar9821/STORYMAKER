@@ -15,7 +15,10 @@ const TOTAL = 5;
 const inputCls = "w-full rounded-2xl border border-border bg-white px-4 py-3 text-ink outline-none focus:ring-2 focus:ring-terracotta/40 transition-shadow";
 const label = "block text-sm font-semibold text-ink/70 mb-2";
 
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+
 const emptyChar = (main = false) => ({
+  _id: uid(),
   name: "", age: 5, gender: "boy", hair_color: "", hair_type: "", hair_length: "",
   hobbies: "", favorite_color: "", favorite_food: "", relation: "", photo_path: "", is_main: main,
 });
@@ -50,7 +53,7 @@ export default function Wizard() {
   const togglePlace = (p) => setForm((f) => ({
     ...f, story_setting: f.story_setting.includes(p) ? f.story_setting.filter((x) => x !== p) : [...f.story_setting, p],
   }));
-  const addPerson = (key) => setForm((f) => ({ ...f, [key]: [...f[key], { name: "", age: "", relation: "" }] }));
+  const addPerson = (key) => setForm((f) => ({ ...f, [key]: [...f[key], { _id: uid(), name: "", age: "", relation: "" }] }));
   const setPerson = (key, i, k, v) => setForm((f) => {
     const arr = [...f[key]]; arr[i] = { ...arr[i], [k]: v }; return { ...f, [key]: arr };
   });
@@ -118,7 +121,7 @@ export default function Wizard() {
                 <div>
                   <StepHead icon={UsersThree} title={t("x.characters")} />
                   {form.characters.map((c, i) => (
-                    <div key={i} className={`rounded-2xl border p-4 mb-4 ${i === 0 ? "border-terracotta/40 bg-terracotta/5" : "border-border bg-white"}`}>
+                    <div key={c._id} className={`rounded-2xl border p-4 mb-4 ${i === 0 ? "border-terracotta/40 bg-terracotta/5" : "border-border bg-white"}`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className="font-bold text-navy">{i === 0 ? t("x.mainCharacter") : `${t("x.characters")} ${i + 1} (+${cfg.extra_character_price} DZD)`}</span>
                         {i > 0 && <button onClick={() => removeChar(i)} data-testid={`remove-char-${i}`} className="text-destructive text-sm inline-flex items-center gap-1"><Trash size={16} /> {t("x.removeChar")}</button>}
@@ -291,7 +294,7 @@ const PersonList = ({ title, list, onAdd, onSet, t, rel, testid }) => (
     <div className="flex items-center justify-between mb-2"><label className={label}>{title}</label>
       <button onClick={onAdd} data-testid={`add-${testid}`} className="text-sage font-bold text-sm">{t("x.addSibling")}</button></div>
     {list.map((p, i) => (
-      <div key={i} className="grid grid-cols-3 gap-2 mb-2">
+      <div key={p._id} className="grid grid-cols-3 gap-2 mb-2">
         <input placeholder={t("x.name")} className={inputCls} value={p.name} onChange={(e) => onSet(i, "name", e.target.value)} />
         <input placeholder={t("x.age")} className={inputCls} value={p.age} onChange={(e) => onSet(i, "age", e.target.value)} />
         <input placeholder={rel ? t("x.relation") : t("x.age")} className={inputCls} value={rel ? p.relation : ""} onChange={(e) => onSet(i, rel ? "relation" : "age", e.target.value)} disabled={!rel} />

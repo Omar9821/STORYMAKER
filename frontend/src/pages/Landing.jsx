@@ -96,7 +96,7 @@ export default function Landing() {
         <div className="grid md:grid-cols-12 gap-5">
           {steps.map((s, i) => (
             <motion.div
-              key={i} custom={i} initial="hidden" whileInView="show" viewport={{ once: true }} variants={fade}
+              key={s.t} custom={i} initial="hidden" whileInView="show" viewport={{ once: true }} variants={fade}
               className={`${s.cls} rounded-3xl p-8 hover:-translate-y-1 transition-transform`}
             >
               <s.icon size={40} weight="duotone" className="text-navy mb-4" />
@@ -115,7 +115,7 @@ export default function Landing() {
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((f, i) => (
-              <motion.div key={i} custom={i} initial="hidden" whileInView="show" viewport={{ once: true }} variants={fade} className="soft-card p-7 text-start">
+              <motion.div key={f.t} custom={i} initial="hidden" whileInView="show" viewport={{ once: true }} variants={fade} className="soft-card p-7 text-start">
                 <div className="w-14 h-14 rounded-2xl bg-terracotta/10 flex items-center justify-center mb-4">
                   <f.icon size={30} weight="duotone" className="text-terracotta" />
                 </div>

@@ -409,31 +409,33 @@ async def config():
             "currency": "DZD", "payment_mock": payment_service.MOCK_MODE}
 
 
+def _validate_image_dims(data: bytes):
+    """Returns (w, h, error_dict|None)."""
+    try:
+        w, h = Image.open(io.BytesIO(data)).size
+    except Exception:
+        return None, None, {"ok": False, "message": "الملف ليس صورة صالحة"}
+    if min(w, h) < 400:
+        return w, h, {"ok": False, "width": w, "height": h,
+                      "message": "دقة الصورة منخفضة. استخدم صورة أوضح (400 بكسل على الأقل)"}
+    return w, h, None
+
+
 @api.post("/orders/check-photo")
 async def check_photo(file: UploadFile = File(...)):
     data = await file.read()
-    try:
-        img = Image.open(io.BytesIO(data))
-        w, h = img.size
-    except Exception:
-        return {"ok": False, "message": "الملف ليس صورة صالحة"}
-    if min(w, h) < 400:
-        return {"ok": False, "width": w, "height": h,
-                "message": "دقة الصورة منخفضة. استخدم صورة أوضح (400 بكسل على الأقل)"}
+    w, h, err = _validate_image_dims(data)
+    if err:
+        return err
     return {"ok": True, "width": w, "height": h, "message": "الصورة مناسبة"}
 
 
 @api.post("/orders/upload-photo")
 async def upload_photo(file: UploadFile = File(...)):
     data = await file.read()
-    try:
-        img = Image.open(io.BytesIO(data))
-        w, h = img.size
-    except Exception:
-        return {"ok": False, "message": "الملف ليس صورة صالحة"}
-    if min(w, h) < 400:
-        return {"ok": False, "width": w, "height": h,
-                "message": "دقة الصورة منخفضة. استخدم صورة أوضح (400 بكسل على الأقل)"}
+    w, h, err = _validate_image_dims(data)
+    if err:
+        return err
     ext = (file.filename.split(".")[-1].lower() if "." in file.filename else "png")
     ct = storage.MIME_TYPES.get(ext, "image/png")
     path = f"{storage.APP_NAME}/references/{uuid.uuid4()}/photo.{ext}"
@@ -595,9 +597,9 @@ async def get_order(order_id: str):
 async def get_file(path: str):
     try:
         data, ct = storage.get_object(path)
+        return Response(content=data, media_type=ct)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    return Response(content=data, media_type=ct)
 
 
 # ---------------- Admin routes ----------------

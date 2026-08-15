@@ -20,8 +20,8 @@ import requests
 from PIL import Image
 
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-ADMIN_EMAIL = "admin@hikayati.dz"
-ADMIN_PASSWORD = "Hikayati@2026"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@hikayati.dz")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Hikayati@2026")
 
 
 def _png_bytes(w=600, h=600, color=(220, 180, 140)):
@@ -61,7 +61,7 @@ def uploaded_photo_path(http):
     r = http.post(f"{BASE_URL}/api/orders/upload-photo", files=files)
     assert r.status_code == 200, r.text
     j = r.json()
-    assert j["ok"] is True
+    assert j["ok"] == True
     assert j.get("path"), "upload-photo should return a path"
     return j["path"]
 
@@ -114,7 +114,7 @@ class TestConfig:
         j = r.json()
         assert j["currency"] == "DZD"
         assert "base_price" in j and "extra_character_price" in j
-        assert j["payment_mock"] is True
+        assert j["payment_mock"] == True
 
 
 # ---------------- Photo upload ----------------
@@ -126,7 +126,41 @@ class TestPhotoUpload:
         files = {"file": ("small.png", _png_bytes(200, 200), "image/png")}
         r = http.post(f"{BASE_URL}/api/orders/upload-photo", files=files)
         assert r.status_code == 200
-        assert r.json()["ok"] is False
+        assert r.json()["ok"] == False
+
+    def test_check_photo_ok(self, http):
+        files = {"file": ("big.png", _png_bytes(500, 500), "image/png")}
+        r = http.post(f"{BASE_URL}/api/orders/check-photo", files=files)
+        assert r.status_code == 200
+        j = r.json()
+        assert j["ok"] == True
+        assert j["width"] == 500 and j["height"] == 500
+
+    def test_check_photo_too_small(self, http):
+        files = {"file": ("tiny.png", _png_bytes(300, 300), "image/png")}
+        r = http.post(f"{BASE_URL}/api/orders/check-photo", files=files)
+        assert r.status_code == 200
+        j = r.json()
+        assert j["ok"] == False
+        assert j["width"] == 300 and j["height"] == 300
+
+    def test_check_photo_invalid_file(self, http):
+        files = {"file": ("bad.png", b"not an image", "image/png")}
+        r = http.post(f"{BASE_URL}/api/orders/check-photo", files=files)
+        assert r.status_code == 200
+        assert r.json()["ok"] == False
+
+
+# ---------------- File serving ----------------
+class TestFileServing:
+    def test_file_bad_path_404(self, http):
+        r = http.get(f"{BASE_URL}/api/files/does/not/exist.png")
+        assert r.status_code == 404
+
+    def test_file_uploaded_serves(self, http, uploaded_photo_path):
+        r = http.get(f"{BASE_URL}/api/files/{uploaded_photo_path}")
+        assert r.status_code == 200
+        assert r.content[:4] == b"\x89PNG"
 
 
 # ---------------- Admin auth guards ----------------
@@ -187,14 +221,14 @@ class TestCoupons:
                       json={"code": self.CODE, "subtotal": 3400})
         assert r.status_code == 200
         j = r.json()
-        assert j["valid"] is True
+        assert j["valid"] == True
         assert j["discount"] == 340
 
     def test_validate_coupon_invalid(self, http):
         r = http.post(f"{BASE_URL}/api/orders/validate-coupon",
                       json={"code": "DOES_NOT_EXIST", "subtotal": 3400})
         assert r.status_code == 200
-        assert r.json()["valid"] is False
+        assert r.json()["valid"] == False
 
     def test_list_coupons(self, http, admin_headers):
         r = http.get(f"{BASE_URL}/api/admin/coupons", headers=admin_headers)

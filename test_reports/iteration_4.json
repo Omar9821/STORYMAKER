@@ -1,0 +1,40 @@
+{
+  "summary": "Targeted regression after code-quality refactor (photo endpoints, get_file, Wizard stable React keys). All requested checks PASS. Backend fast suite: 32/32 in-scope pytest cases green (photo check/upload with new _validate_image_dims helper, file serving 404/200, order-creation pricing math for single/multi-char/coupon/consent/photo-required, admin auth guards, coupons lifecycle, admin settings + /api/config reflection, tickets create+list+admin-reply, admin stats shape). The 4 pre-known TestGenerationAndRegen failures (fal-pulid upstream 502) were NOT re-run as requested. Frontend: Wizard stable-key fix verified — main character name+photo preserved after adding+removing extra characters, non-removed extra character (Nour-Friend) correctly slid from index 2 to index 1 with its relation intact; sibling list preserves prior two names after adding a third; state survives step navigation. Full happy path Wizard->/pay/{id}->COD->/track/{id} works, wizard-total shows 3400 DZD. Admin dashboard tabs (orders/pricing/tickets/reports) all render post-login.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/files/{path}", "issue": "Exceptions from storage.get_object are swallowed by a bare 'except Exception'. This works, but obscures non-404 failures (e.g. S3/minio transient error) as 404. Consider narrowing to catch NoSuchKey/FileNotFoundError only and letting other exceptions surface as 500."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Wizard step 4 - siblings/friends PersonList", "issues": ["Sibling/friend name/age/relation inputs have no data-testid (only add-sibling/add-friend buttons do). Adding data-testid=\"sibling-name-{i}\" etc. would make automated regression against future refactors more robust."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_fast.xml"
+  ],
+  "action_items": [
+    "NONE — regression is clean. Optional: (1) add data-testid attributes to sibling/friend inputs; (2) narrow get_file exception handling to filesystem-not-found only."
+  ],
+  "critical_code_review_comments": [
+    "_validate_image_dims correctly returns a 3-tuple (w, h, err) and is reused by both check_photo and upload_photo — clean deduplication.",
+    "get_file now uses try/except around storage.get_object with 404 fallback — improvement over prior version, but see minor above.",
+    "Wizard.jsx: uid()+_id on characters/siblings/friends and c._id / p._id as React keys — correctly prevents state bleed on add/remove. Verified in browser.",
+    "server.py still 826 lines — consider splitting admin/orders/tickets routers (unchanged from iteration 3 recommendation).",
+    "Bare 'except Exception' in get_file could mask real backend errors as 404. Low-priority tightening."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added TestPhotoUpload.test_check_photo_ok/too_small/invalid_file and TestFileServing.test_file_bad_path_404/test_file_uploaded_serves)"
+  ],
+  "success_rate": {"backend": "32/32 in-scope (100%); 4/4 slow AI tests intentionally not re-run per review scope", "frontend": "100% — Wizard state preservation, full happy path, admin tabs all pass"},
+  "test_credentials": "admin@hikayati.dz / Hikayati@2026 (from /app/memory/test_credentials.md) — LOGIN OK",
+  "seed_data_creation": "Multiple TEST_ prefixed orders (TEST_Sara, TEST_TicketOrder, TEST_Regen, TEST_UIx) created; coupon TESTPCT10 upserted; one new ticket created via TestTickets.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Refactor did not regress anything. Photo check/upload use _validate_image_dims helper — confirmed with small/large/invalid inputs. File serving returns 404 for bad paths and 200 with PNG bytes for uploaded paths. Wizard stable React keys (_id) verified: removing a middle character preserves siblings' input state and main character name+photo; adding a 3rd sibling preserves prior two. AI generation tests (TestGenerationAndRegen) were intentionally skipped per review request; the pre-existing fal-pulid upstream 502 blocker from iteration_3 is unrelated to this refactor and should be tracked separately.",
+  "rca of the issue": "No new issues found."
+}
