@@ -29,12 +29,12 @@ export default function Wizard() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
-  const [cfg, setCfg] = useState({ base_price: 3400, extra_character_price: 250 });
+  const [cfg, setCfg] = useState({ base_price: 3400, extra_character_price: 250, coloring_price: 500 });
   const [coupon, setCoupon] = useState({ code: "", discount: 0, checked: false });
   const [form, setForm] = useState({
     characters: [emptyChar(true)],
     story_type: "encouragement", positive_behaviors: "", negative_behaviors: "", special_details: "",
-    language: "ar", language_level: "simple", art_style: "cartoon", story_setting: [],
+    language: "ar", language_level: "simple", art_style: "cartoon", book_type: "colored", story_setting: [],
     lives_with: "", mother_name: "", mother_age: "", father_name: "", father_age: "", mention_parents: true,
     siblings: [], friends: [], quantity: 1, coupon_code: "",
     customer_name: "", customer_phone: "", customer_email: "", wilaya: "", shipping_address: "", consent: false,
@@ -59,7 +59,7 @@ export default function Wizard() {
   const Arrow = dir === "rtl" ? ArrowLeft : ArrowRight;
   const BackArrow = dir === "rtl" ? ArrowRight : ArrowLeft;
 
-  const unit = cfg.base_price + Math.max(0, form.characters.length - 1) * cfg.extra_character_price;
+  const unit = (form.book_type === "coloring" ? (cfg.coloring_price || 500) : cfg.base_price) + Math.max(0, form.characters.length - 1) * cfg.extra_character_price;
   const subtotal = unit * Math.max(1, form.quantity);
   const total = Math.max(0, subtotal - coupon.discount);
 
@@ -186,6 +186,19 @@ export default function Wizard() {
               {step === 3 && (
                 <div>
                   <StepHead icon={Translate} title={t("x.settings")} />
+                  <label className={label}>{t("x.bookType")}</label>
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    {[["colored", t("x.bookColored"), t("x.bookColoredDesc"), cfg.base_price], ["coloring", t("x.bookColoring"), t("x.bookColoringDesc"), cfg.coloring_price]].map(([v, l, d, p]) => (
+                      <button key={v} type="button" onClick={() => set("book_type", v)} data-testid={`booktype-${v}`}
+                        className={`rounded-2xl border-2 p-4 text-start transition-all active:scale-95 ${form.book_type === v ? "border-terracotta ring-2 ring-terracotta/30 bg-terracotta/5 shadow-md" : "border-border hover:border-terracotta/40 bg-white"}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`font-bold ${form.book_type === v ? "text-terracotta" : "text-navy"}`}>{l}</span>
+                          {form.book_type === v && <CheckCircle size={18} weight="fill" className="text-terracotta" />}
+                        </div>
+                        <p className="text-xs text-ink/55 mb-2">{d}</p>
+                        <span className="text-sm font-extrabold text-navy">{p} <span className="text-xs font-semibold">DZD</span></span>
+                      </button>))}
+                  </div>
                   <label className={label}>{t("wizard.language")}</label>
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     {[["ar", t("wizard.langAr")], ["fr", t("wizard.langFr")], ["en", t("wizard.langEn")]].map(([v, l]) => (
@@ -196,6 +209,7 @@ export default function Wizard() {
                     {[["simple", t("x.simple")], ["medium", t("x.medium")], ["advanced", t("x.advanced")]].map(([v, l]) => (
                       <Choice key={v} active={form.language_level === v} onClick={() => set("language_level", v)} testid={`level-${v}`}>{l}</Choice>))}
                   </div>
+                  {form.book_type === "colored" && (<>
                   <label className={label}>{t("x.artStyle")}</label>
                   <div className="grid grid-cols-3 gap-3 mb-4">
                     {[["cartoon", t("x.styleCartoon"), "/styles/cartoon.jpg"], ["watercolor", t("x.styleWatercolor"), "/styles/watercolor.jpg"], ["3d", t("x.style3d"), "/styles/style3d.jpg"]].map(([v, l, img]) => (
@@ -208,6 +222,7 @@ export default function Wizard() {
                         <span className={`block py-2 text-sm font-bold ${form.art_style === v ? "text-terracotta" : "text-ink/70"}`}>{l}</span>
                       </button>))}
                   </div>
+                  </>)}
                   <label className={label}>{t("x.place")}</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[["home", t("x.home")], ["school", t("x.school")], ["parks", t("x.parks")], ["fantasy", t("x.fantasy")]].map(([v, l]) => (

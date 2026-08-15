@@ -111,6 +111,7 @@ class OrderCreate(BaseModel):
     language: str
     language_level: str = "simple"
     art_style: str = "cartoon"  # cartoon | watercolor | 3d
+    book_type: str = "colored"  # colored | coloring
     story_setting: list[str] = []
     lives_with: str
     mother_name: str = ""
@@ -141,6 +142,7 @@ class CouponBody(BaseModel):
 class SettingsBody(BaseModel):
     base_price: int
     extra_character_price: int
+    coloring_price: int = 500
 
 
 class TicketBody(BaseModel):
@@ -156,8 +158,11 @@ class TicketReplyBody(BaseModel):
 async def get_settings() -> dict:
     s = await db.settings.find_one({"_id": "config"})
     if not s:
-        s = {"_id": "config", "base_price": BOOK_PRICE, "extra_character_price": 250}
+        s = {"_id": "config", "base_price": BOOK_PRICE, "extra_character_price": 250, "coloring_price": 500}
         await db.settings.insert_one(s)
+    if "coloring_price" not in s:
+        s["coloring_price"] = 500
+        await db.settings.update_one({"_id": "config"}, {"$set": {"coloring_price": 500}})
     return s
 
 
@@ -443,6 +448,7 @@ async def config():
     s = await get_settings()
     return {"price": s["base_price"], "base_price": s["base_price"],
             "extra_character_price": s["extra_character_price"],
+            "coloring_price": s["coloring_price"],
             "currency": "DZD", "payment_mock": payment_service.MOCK_MODE}
 
 
@@ -499,7 +505,8 @@ async def create_order(body: OrderCreate):
 
     settings = await get_settings()
     n_extra = max(0, len(body.characters) - 1)
-    unit = settings["base_price"] + n_extra * settings["extra_character_price"]
+    base = settings["coloring_price"] if body.book_type == "coloring" else settings["base_price"]
+    unit = base + n_extra * settings["extra_character_price"]
     subtotal = unit * max(1, body.quantity)
     discount, coupon = await compute_coupon(body.coupon_code, subtotal)
     amount = subtotal - discount
@@ -522,6 +529,7 @@ async def create_order(body: OrderCreate):
         "language": body.language,
         "story_level": body.language_level,
         "art_style": body.art_style,
+        "book_type": body.book_type,
         "story_setting": body.story_setting,
         "extra_context": build_story_context(body),
         "lives_with": body.lives_with,
@@ -799,13 +807,14 @@ async def admin_privacy_logs(payload: dict = Depends(auth.require_admin)):
 @api.get("/admin/settings")
 async def admin_get_settings(payload: dict = Depends(auth.require_admin)):
     s = await get_settings()
-    return {"base_price": s["base_price"], "extra_character_price": s["extra_character_price"]}
+    return {"base_price": s["base_price"], "extra_character_price": s["extra_character_price"], "coloring_price": s["coloring_price"]}
 
 
 @api.put("/admin/settings")
 async def admin_put_settings(body: SettingsBody, payload: dict = Depends(auth.require_admin)):
     await db.settings.update_one({"_id": "config"}, {"$set": {
-        "base_price": body.base_price, "extra_character_price": body.extra_character_price}}, upsert=True)
+        "base_price": body.base_price, "extra_character_price": body.extra_character_price,
+        "coloring_price": body.coloring_price}}, upsert=True)
     return {"ok": True}
 
 

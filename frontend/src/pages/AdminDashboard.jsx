@@ -25,7 +25,7 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const [settings, setSettings] = useState({ base_price: 3400, extra_character_price: 250 });
+  const [settings, setSettings] = useState({ base_price: 3400, extra_character_price: 250, coloring_price: 500 });
   const [selected, setSelected] = useState(null);
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent", value: 10, max_uses: 0 });
   const [expandedVer, setExpandedVer] = useState(null);
@@ -172,7 +172,9 @@ export default function AdminDashboard() {
               <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.basePrice")} (DZD)</label>
               <input type="number" data-testid="base-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-3" value={settings.base_price} onChange={(e) => setSettings((s) => ({ ...s, base_price: Number(e.target.value) }))} />
               <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.extraCharPrice")} (DZD)</label>
-              <input type="number" data-testid="extra-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-4" value={settings.extra_character_price} onChange={(e) => setSettings((s) => ({ ...s, extra_character_price: Number(e.target.value) }))} />
+              <input type="number" data-testid="extra-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-3" value={settings.extra_character_price} onChange={(e) => setSettings((s) => ({ ...s, extra_character_price: Number(e.target.value) }))} />
+              <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.coloringPrice")}</label>
+              <input type="number" data-testid="coloring-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-4" value={settings.coloring_price ?? 500} onChange={(e) => setSettings((s) => ({ ...s, coloring_price: Number(e.target.value) }))} />
               <button onClick={saveSettings} data-testid="save-settings" className="bg-terracotta text-white font-bold px-6 py-2.5 rounded-full">{t("x.save")}</button>
             </div>
             <div className="soft-card p-6">
@@ -253,6 +255,7 @@ export default function AdminDashboard() {
               <Row label={t("x.payment")} value={selected.payment_status === "cod_pending" ? t("x.payConfirmed") : selected.payment_status === "paid" ? t("x.payPaid") : t("x.payPending")} />
               <Row label={t("admin.aiCost")} value={`$${selected.ai_cost_usd || 0}`} />
               {selected.art_style && <Row label={t("x.artStyle")} value={t(`x.style${selected.art_style === "3d" ? "3d" : selected.art_style.charAt(0).toUpperCase() + selected.art_style.slice(1)}`)} />}
+              <Row label={t("x.bookType")} value={selected.book_type === "coloring" ? t("x.bookColoring") : t("x.bookColored")} />
               {selected.avg_similarity != null && <Row label={t("admin.similarity")} value={`${selected.avg_similarity} (MOCK)`} />}
               <Row label={t("admin.refDeleted")} value={selected.reference_photo_deleted ? "✓" : "—"} />
               {selected.versions?.length > 0 && <Row label={t("x.versions")} value={selected.versions.length} />}
