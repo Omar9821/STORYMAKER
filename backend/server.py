@@ -88,9 +88,6 @@ class Character(BaseModel):
     name: str
     age: int = 5
     gender: str = "boy"
-    hair_color: str = ""
-    hair_type: str = ""
-    hair_length: str = ""
     hobbies: str = ""
     favorite_color: str = ""
     favorite_food: str = ""
@@ -184,9 +181,6 @@ async def compute_coupon(code: str, subtotal: int):
 def build_story_context(o: OrderCreate) -> str:
     main = o.characters[0]
     parts = []
-    hair = " ".join(x for x in [main.hair_length, main.hair_color, main.hair_type] if x).strip()
-    if hair:
-        parts.append(f"hair: {hair}")
     if main.hobbies:
         parts.append(f"hobbies: {main.hobbies}")
     if main.favorite_color:
@@ -713,6 +707,20 @@ async def admin_get_order(order_id: str, payload: dict = Depends(auth.require_ad
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     return public_order(order)
+
+
+@api.post("/admin/orders/{order_id}/rebuild-pdf")
+async def admin_rebuild_pdf(order_id: str, payload: dict = Depends(auth.require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    if not order.get("pages") or not order.get("cover_path"):
+        raise HTTPException(status_code=400, detail="لا توجد صور مولّدة لإعادة بناء الملف")
+    pdf_bytes, coloring_bytes = await asyncio.to_thread(_rebuild_pdfs, order)
+    storage.put_object(order["pdf_path"], pdf_bytes, "application/pdf")
+    storage.put_object(order["coloring_pdf_path"], coloring_bytes, "application/pdf")
+    await push_status(order_id, order.get("status", "review"), "أُعيد بناء ملف PDF بالتصميم الجديد")
+    return {"ok": True}
 
 
 @api.delete("/admin/orders/{order_id}")

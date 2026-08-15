@@ -86,7 +86,7 @@ const resources = {
       x: {
         characters: "الشخصيات", mainCharacter: "الشخصية الأساسية", addCharacter: "+ إضافة شخصية",
         extraCharCost: "كل شخصية إضافية: 250 دج", removeChar: "حذف", relation: "صلة القرابة",
-        hairColor: "لون الشعر", hairType: "نوع الشعر", hairLength: "طول الشعر",
+        hairColor: "لون الشعر", hairType: "نوع الشعر", hairLength: "طول الشعر", optional: "اختياري",
         hobbies: "الهوايات", favColor: "اللون المفضل", favFood: "الطعام الصحي المفضل",
         goals: "الأهداف التربوية", positive: "سلوكيات إيجابية لتعزيزها", negative: "سلوكيات لمعالجتها",
         special: "تفاصيل خاصة (نظارة، مكان مفضل...)",
@@ -192,7 +192,7 @@ const resources = {
       x: {
         characters: "Characters", mainCharacter: "Main character", addCharacter: "+ Add character",
         extraCharCost: "Each extra character: 250 DZD", removeChar: "Remove", relation: "Relation",
-        hairColor: "Hair colour", hairType: "Hair type", hairLength: "Hair length",
+        hairColor: "Hair colour", hairType: "Hair type", hairLength: "Hair length", optional: "optional",
         hobbies: "Hobbies", favColor: "Favourite colour", favFood: "Favourite healthy food",
         goals: "Educational goals", positive: "Positive behaviours to reinforce", negative: "Behaviours to correct",
         special: "Special details (glasses, favourite place...)",
@@ -298,7 +298,7 @@ const resources = {
       x: {
         characters: "Personnages", mainCharacter: "Personnage principal", addCharacter: "+ Ajouter un personnage",
         extraCharCost: "Chaque personnage supplémentaire : 250 DZD", removeChar: "Supprimer", relation: "Relation",
-        hairColor: "Couleur des cheveux", hairType: "Type de cheveux", hairLength: "Longueur des cheveux",
+        hairColor: "Couleur des cheveux", hairType: "Type de cheveux", hairLength: "Longueur des cheveux", optional: "optionnel",
         hobbies: "Loisirs", favColor: "Couleur préférée", favFood: "Aliment sain préféré",
         goals: "Objectifs éducatifs", positive: "Comportements positifs à renforcer", negative: "Comportements à corriger",
         special: "Détails spéciaux (lunettes, lieu préféré...)",

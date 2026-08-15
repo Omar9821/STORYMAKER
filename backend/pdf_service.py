@@ -1,39 +1,58 @@
-"""PDF book assembly with RTL (Arabic) + LTR (English/French) support using reportlab."""
+"""PDF book assembly — qessati-style: integrated card pages, scene-harmonised
+gradient backgrounds, playful rounded Arabic typography, a designed cover with the
+child in a circle, a festive ending page, and a clean coloring book."""
 import os
 import io
+import math
+import re
+import unicodedata
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from reportlab.lib.colors import Color
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import arabic_reshaper
 from bidi.algorithm import get_display
+from PIL import Image, ImageFilter, ImageOps
+import numpy as np
 
 FONT_DIR = os.path.join(os.path.dirname(__file__), "fonts")
 _FONTS_REGISTERED = False
+
+# Fonts: Lemonada (rounded, friendly, playful — full Arabic+Latin). Static
+# instances: regular=500, bold=700. Renders correctly in reportlab.
+BODY = "Lemonada"
+DISPLAY = "Lemonada-Bold"
 
 
 def _register_fonts():
     global _FONTS_REGISTERED
     if _FONTS_REGISTERED:
         return
-    pdfmetrics.registerFont(TTFont("Amiri", os.path.join(FONT_DIR, "Amiri-Regular.ttf")))
-    pdfmetrics.registerFont(TTFont("Amiri-Bold", os.path.join(FONT_DIR, "Amiri-Bold.ttf")))
-    pdfmetrics.registerFont(TTFont("Tajawal", os.path.join(FONT_DIR, "Tajawal-Regular.ttf")))
-    pdfmetrics.registerFont(TTFont("Tajawal-Bold", os.path.join(FONT_DIR, "Tajawal-Bold.ttf")))
+    pdfmetrics.registerFont(TTFont("Lemonada", os.path.join(FONT_DIR, "Lemonada-Regular.ttf")))
+    pdfmetrics.registerFont(TTFont("Lemonada-Bold", os.path.join(FONT_DIR, "Lemonada-Bold.ttf")))
     _FONTS_REGISTERED = True
 
 
+def _fix_isolated(s: str) -> str:
+    """Modern fonts omit ISOLATED presentation forms (they use the base letter).
+    Map any <isolated> presentation form back to its base codepoint so standalone
+    Arabic letters render instead of showing empty boxes."""
+    out = []
+    for ch in s:
+        d = unicodedata.decomposition(ch)
+        out.append(chr(int(d.split()[-1], 16)) if d.startswith("<isolated>") else ch)
+    return "".join(out)
+
+
 def _shape(text: str, rtl: bool) -> str:
-    if rtl:
-        return get_display(arabic_reshaper.reshape(text))
-    return text
+    return get_display(_fix_isolated(arabic_reshaper.reshape(text))) if rtl else text
 
 
-def _wrap(c, text, font, size, max_width):
-    words = text.split()
+def _wrap(text, font, size, max_width):
     lines, cur = [], ""
-    for w in words:
+    for w in (text or "").split():
         trial = (cur + " " + w).strip()
         if pdfmetrics.stringWidth(trial, font, size) <= max_width:
             cur = trial
@@ -46,115 +65,208 @@ def _wrap(c, text, font, size, max_width):
     return lines
 
 
-def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
-                   language: str, child_name: str) -> bytes:
-    """pages: list of {'text': str, 'image': bytes}. Returns PDF bytes."""
-    _register_fonts()
-    rtl = language == "ar"
-    body_font = "Amiri" if rtl else "Helvetica"
-    bold_font = "Amiri-Bold" if rtl else "Helvetica-Bold"
+def _mix(color, amt):
+    """Mix an (r,g,b) 0..1 color toward white by amt (0=color, 1=white)."""
+    return tuple(v + (1.0 - v) * amt for v in color)
 
-    buf = io.BytesIO()
-    W, H = A4
-    c = canvas.Canvas(buf, pagesize=A4)
-    margin = 40
 
-    def draw_text_block(text, y_top, size, font, color=(0.17, 0.18, 0.26)):
-        import re
-        text = re.sub(r'([:.،,!؟?])(?=\S)', r'\1 ', (text or "").strip())
-        c.setFont(font, size)
-        c.setFillColorRGB(*color)
-        max_w = W - 2 * margin
-        # Wrap the LOGICAL text first (preserves natural top-to-bottom order),
-        # then reshape each line for correct RTL glyph joining.
-        lines = _wrap(c, text, font, size, max_w)
-        y = y_top
-        for line in lines:
-            disp = _shape(line, rtl)
-            if rtl:
-                c.drawRightString(W - margin, y, disp)
-            else:
-                c.drawString(margin, y, disp)
-            y -= size * 1.5
-        return y
+def _dominant_color(image_bytes):
+    """Average colour of an illustration, slightly saturated, as (r,g,b) 0..1."""
+    try:
+        im = Image.open(io.BytesIO(image_bytes)).convert("RGB").resize((32, 32))
+        arr = np.asarray(im, dtype=np.float32).reshape(-1, 3) / 255.0
+        r, g, b = arr[:, 0].mean(), arr[:, 1].mean(), arr[:, 2].mean()
+        return (float(r), float(g), float(b))
+    except Exception:
+        return (0.95, 0.78, 0.55)
 
-    def draw_image_area(img_bytes, x, y, w, h):
+
+class BookCanvas:
+    def __init__(self, buf):
+        self.W, self.H = A4
+        self.c = canvas.Canvas(buf, pagesize=A4)
+
+    # ---- primitives ----
+    def bg_gradient(self, top_c, bottom_c):
+        c, W, H = self.c, self.W, self.H
+        c.saveState()
+        p = c.beginPath(); p.rect(0, 0, W, H); c.clipPath(p, stroke=0, fill=0)
+        c.linearGradient(0, H, 0, 0, [Color(*top_c), Color(*bottom_c)], (0, 1), extend=True)
+        c.restoreState()
+
+    def image_cover(self, img_bytes, x, y, w, h):
         try:
             img = ImageReader(io.BytesIO(img_bytes))
             iw, ih = img.getSize()
-            ratio = min(w / iw, h / ih)
+            ratio = max(w / iw, h / ih)
             dw, dh = iw * ratio, ih * ratio
-            c.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh, mask="auto")
+            self.c.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh, mask="auto")
         except Exception:
             pass
 
-    # ---- Cover ----
-    c.setFillColorRGB(0.96, 0.85, 0.62)
-    c.rect(0, 0, W, H, fill=1, stroke=0)
-    c.setFillColorRGB(0.98, 0.93, 0.80)
-    c.rect(0, 0, W, H * 0.62, fill=1, stroke=0)
-    # logo badge (top)
-    c.setFillColorRGB(0.88, 0.48, 0.37)
-    c.roundRect(W / 2 - 60, H - 70, 120, 34, 16, fill=1, stroke=0)
-    c.setFont(bold_font, 16); c.setFillColorRGB(1, 1, 1)
-    c.drawCentredString(W / 2, H - 60, _shape("حكايتي" if rtl else "Hikayati", rtl))
-    # hero image
-    draw_image_area(cover_image, margin, H * 0.30, W - 2 * margin, H * 0.52)
-    # title on a soft band
-    c.setFillColorRGB(1, 1, 1)
-    c.roundRect(margin, H * 0.15, W - 2 * margin, H * 0.12, 20, fill=1, stroke=0)
-    c.setFont(bold_font, 34); c.setFillColorRGB(0.88, 0.48, 0.37)
-    c.drawCentredString(W / 2, H * 0.19, _shape(title, rtl))
+    def rounded_image(self, img_bytes, x, y, w, h, radius):
+        c = self.c
+        c.saveState()
+        p = c.beginPath(); p.roundRect(x, y, w, h, radius); c.clipPath(p, stroke=0, fill=0)
+        self.image_cover(img_bytes, x, y, w, h)
+        c.restoreState()
+
+    def circle_image(self, img_bytes, cx, cy, r):
+        c = self.c
+        c.saveState()
+        p = c.beginPath(); p.circle(cx, cy, r); c.clipPath(p, stroke=0, fill=0)
+        self.image_cover(img_bytes, cx - r, cy - r, 2 * r, 2 * r)
+        c.restoreState()
+
+    def logo_badge(self, rtl, accent):
+        c, W, H = self.c, self.W, self.H
+        label = _shape("حكايتي" if rtl else "Hikayati", rtl)
+        c.setFont(DISPLAY, 15)
+        tw = pdfmetrics.stringWidth(label, DISPLAY, 15)
+        pad = 14
+        bw = tw + pad * 2
+        x = W - bw - 26
+        c.setFillColor(Color(*accent))
+        c.roundRect(x, H - 52, bw, 30, 15, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1)
+        c.drawString(x + pad, H - 45, label)
+
+    def star(self, cx, cy, r, color):
+        c = self.c
+        pts = []
+        for i in range(10):
+            ang = math.pi / 2 + i * math.pi / 5
+            rad = r if i % 2 == 0 else r * 0.45
+            pts.append((cx + rad * math.cos(ang), cy + rad * math.sin(ang)))
+        p = c.beginPath(); p.moveTo(*pts[0])
+        for pt in pts[1:]:
+            p.lineTo(*pt)
+        p.close()
+        c.setFillColor(Color(*color)); c.drawPath(p, fill=1, stroke=0)
+
+    def paragraph(self, text, x, y_bottom, box_w, box_h, size, font, color):
+        c = self.c
+        text = re.sub(r'([:.،,!؟?])(?=\S)', r'\1 ', (text or "").strip())
+        lines = _wrap(text, font, size, box_w)
+        line_h = size * 1.55
+        total = len(lines) * line_h
+        cx = x + box_w / 2
+        y = y_bottom + (box_h + total) / 2 - line_h
+        c.setFont(font, size); c.setFillColor(Color(*color))
+        rtl = font == BODY  # shaping handled by caller; we pass already-logical text
+        for ln in lines:
+            c.drawCentredString(cx, y, ln)
+            y -= line_h
+
+
+def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
+                   language: str, child_name: str) -> bytes:
+    _register_fonts()
+    rtl = language == "ar"
+    buf = io.BytesIO()
+    bc = BookCanvas(buf)
+    c, W, H = bc.c, bc.W, bc.H
+
+    def shp(t):
+        return _shape(t, rtl)
+
+    # ---------------- Cover ----------------
+    dom = _dominant_color(cover_image)
+    bc.bg_gradient(_mix(dom, 0.35), _mix(dom, 0.70))
+    # decorative stars
+    bc.star(60, H - 110, 16, _mix(dom, 0.15))
+    bc.star(W - 70, H - 160, 12, _mix(dom, 0.15))
+    bc.star(48, 120, 11, _mix(dom, 0.2))
+    # child inside a circle with a soft ring
+    r = W * 0.30
+    cx, cy = W / 2, H * 0.60
+    c.setFillColor(Color(*_mix(dom, 0.85)))
+    c.circle(cx, cy, r + 16, fill=1, stroke=0)
+    c.setStrokeColor(Color(1, 1, 1)); c.setLineWidth(8)
+    c.circle(cx, cy, r + 4, fill=0, stroke=1)
+    bc.circle_image(cover_image, cx, cy, r)
+    # logo badge
+    bc.logo_badge(rtl, _mix(dom, 0.05))
+    # title (big playful display)
+    dark = (0.16, 0.17, 0.28)
+    title_lines = _wrap(shp(title), DISPLAY, 46, W - 90)
+    c.setFillColor(Color(*dark)); c.setFont(DISPLAY, 46)
+    ty = cy - r - 70
+    for ln in title_lines:
+        c.drawCentredString(W / 2, ty, ln)
+        ty -= 52
+    # subtitle
+    sub = shp(f"قصة مخصّصة لـ {child_name}" if rtl else f"A special story for {child_name}")
+    c.setFont(BODY, 16); c.setFillColor(Color(*_mix(dark, 0.35)))
+    c.drawCentredString(W / 2, ty - 4, sub)
     c.showPage()
 
-    # ---- Story pages: near full-bleed image + coloured text band + logo badge ----
+    # ---------------- Story pages (integrated cards) ----------------
     for i, pg in enumerate(pages):
-        c.setFillColorRGB(0.99, 0.985, 0.97)
-        c.rect(0, 0, W, H, fill=1, stroke=0)
-        if pg.get("image"):
-            draw_image_area(pg["image"], 0, H * 0.34, W, H * 0.66)
-        # coloured text band at the bottom
-        c.setFillColorRGB(0.95, 0.90, 0.78)
-        c.roundRect(margin * 0.6, H * 0.05, W - margin * 1.2, H * 0.26, 18, fill=1, stroke=0)
-        draw_text_block(pg.get("text", ""), H * 0.27, 18, body_font)
-        # logo badge + page number
-        c.setFillColorRGB(0.88, 0.48, 0.37)
-        c.roundRect(W - 120, H - 44, 96, 26, 12, fill=1, stroke=0)
-        c.setFont(bold_font, 12); c.setFillColorRGB(1, 1, 1)
-        c.drawCentredString(W - 72, H - 37, _shape("حكايتي" if rtl else "Hikayati", rtl))
-        c.setFont(body_font, 11); c.setFillColorRGB(0.55, 0.55, 0.5)
-        c.drawCentredString(W / 2, 24, str(i + 1))
+        img = pg.get("image")
+        dom = _dominant_color(img) if img else (0.95, 0.8, 0.6)
+        bc.bg_gradient(_mix(dom, 0.55), _mix(dom, 0.88))
+        # card
+        cm = 30
+        card_x, card_w = cm, W - 2 * cm
+        card_y, card_h = 56, H - 56 - 78
+        c.setFillColor(Color(*_mix(dom, 0.93)))
+        c.roundRect(card_x, card_y, card_w, card_h, 26, fill=1, stroke=0)
+        # image occupies top ~60% of card (rounded)
+        pad = 16
+        img_h = card_h * 0.60
+        img_y = card_y + card_h - img_h - pad
+        if img:
+            bc.rounded_image(img, card_x + pad, img_y, card_w - 2 * pad, img_h, 18)
+        # text in the lower portion of the card
+        txt_bottom = card_y + pad
+        txt_h = img_y - txt_bottom
+        bc.paragraph(shp(pg.get("text", "")), card_x + pad + 6, txt_bottom,
+                     card_w - 2 * pad - 12, txt_h, 19, BODY, (0.18, 0.19, 0.30))
+        # logo + page number
+        bc.logo_badge(rtl, _mix(dom, 0.02))
+        c.setFillColor(Color(*_mix(dom, 0.1)))
+        c.circle(W / 2, 30, 15, fill=1, stroke=0)
+        c.setFont(DISPLAY, 14); c.setFillColorRGB(1, 1, 1)
+        c.drawCentredString(W / 2, 25, str(i + 1))
         c.showPage()
 
-    # ---- Moral / closing ----
+    # ---------------- Festive ending page ----------------
+    end_dom = (0.55, 0.72, 0.62)
+    bc.bg_gradient(_mix(end_dom, 0.25), _mix(end_dom, 0.55))
+    # scattered stars
+    for (sx, sy, sr) in [(70, H - 130, 16), (W - 80, H - 120, 13), (100, 150, 12),
+                          (W - 110, 180, 15), (W / 2 - 140, H - 90, 10), (W / 2 + 150, H - 100, 11)]:
+        bc.star(sx, sy, sr, (1, 1, 1))
+    # framed card
+    fm = 55
+    c.setFillColor(Color(1, 1, 1))
+    c.roundRect(fm, H * 0.30, W - 2 * fm, H * 0.40, 28, fill=1, stroke=0)
+    c.setStrokeColor(Color(*_mix(end_dom, 0.1))); c.setLineWidth(3)
+    c.roundRect(fm + 10, H * 0.30 + 10, W - 2 * fm - 20, H * 0.40 - 20, 22, fill=0, stroke=1)
+    # "The End" headline
+    c.setFont(DISPLAY, 44); c.setFillColor(Color(*_mix(end_dom, 0.05)))
+    c.drawCentredString(W / 2, H * 0.60, shp("النهاية" if rtl else "The End"))
+    # moral
     if moral:
-        c.setFillColorRGB(0.51, 0.70, 0.60)
-        c.rect(0, 0, W, H, fill=1, stroke=0)
-        c.setFont(body_font, 40); c.setFillColorRGB(1, 1, 1)
-        c.drawCentredString(W / 2, H * 0.72, "★  ✿  ★")
-        c.setFont(bold_font, 24); c.setFillColorRGB(1, 1, 1)
-        lines = _wrap(c, moral, bold_font, 24, W - 2 * margin)
-        y = H / 2 + len(lines) * 18
-        for line in lines:
-            c.drawCentredString(W / 2, y, _shape(line, rtl))
-            y -= 36
-        c.setFont(bold_font, 16)
-        c.drawCentredString(W / 2, H * 0.2, _shape("حكايتي" if rtl else "Hikayati", rtl))
-        c.showPage()
+        c.setFont(DISPLAY, 22); c.setFillColor(Color(0.20, 0.22, 0.30))
+        y = H * 0.52
+        for ln in _wrap(shp(moral), DISPLAY, 22, W - 2 * fm - 70):
+            c.drawCentredString(W / 2, y, ln)
+            y -= 34
+    bc.star(W / 2, H * 0.355, 18, _mix(end_dom, 0.0))
+    bc.logo_badge(rtl, _mix(end_dom, 0.0))
+    c.showPage()
 
     c.save()
     buf.seek(0)
     return buf.read()
 
 
-
 def make_line_art(image_bytes: bytes) -> bytes:
-    """Convert a coloured illustration into a clean medium-weight coloring-book line drawing (PNG)."""
-    from PIL import Image, ImageFilter, ImageOps
-    import numpy as np
+    """Colour illustration -> clean, medium-weight coloring-book outline (PNG)."""
     img = Image.open(io.BytesIO(image_bytes)).convert("L")
     img = ImageOps.autocontrast(img)
-    # strong denoise first so soft watercolour areas don't produce speckle noise
     smooth = img.filter(ImageFilter.MedianFilter(5)).filter(ImageFilter.GaussianBlur(1.2))
     inv = ImageOps.invert(smooth)
     blur = inv.filter(ImageFilter.GaussianBlur(12))
@@ -163,10 +275,9 @@ def make_line_art(image_bytes: bytes) -> bytes:
     sketch = np.minimum(255.0, g * 255.0 / np.maximum(255.0 - b, 1.0))
     edges = np.asarray(smooth.filter(ImageFilter.FIND_EDGES), dtype=np.float32)
     combined = np.clip(sketch - edges * 1.2, 0, 255)
-    # higher threshold keeps only confident outlines (removes faint background noise)
-    out = np.where(combined < 165, 0, 255).astype("uint8")
+    out = np.where(combined < 168, 0, 255).astype("uint8")
     result = Image.fromarray(out, "L")
-    # clean isolated specks, then give medium line weight
+    # despeckle, then give clean MEDIUM line weight (not hairline, not heavy)
     result = result.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.MinFilter(3))
     buf = io.BytesIO()
     result.convert("RGB").save(buf, "PNG")
@@ -174,26 +285,28 @@ def make_line_art(image_bytes: bytes) -> bytes:
 
 
 def build_coloring_pdf(title: str, line_pages: list, language: str) -> bytes:
-    """line_pages: list of image bytes (line art). Returns a coloring-book PDF."""
     _register_fonts()
     rtl = language == "ar"
-    bold_font = "Amiri-Bold" if rtl else "Helvetica-Bold"
     buf = io.BytesIO()
     W, H = A4
     c = canvas.Canvas(buf, pagesize=A4)
     margin = 30
 
-    c.setFillColorRGB(1, 1, 1)
-    c.rect(0, 0, W, H, fill=1, stroke=0)
-    c.setFont(bold_font, 30)
-    c.setFillColorRGB(0.17, 0.18, 0.26)
-    heading = _shape(("كراس تلوين: " + title) if rtl else ("Coloring Book: " + title), rtl)
-    c.drawCentredString(W / 2, H * 0.55, heading)
+    # cover
+    c.setFillColorRGB(1, 1, 1); c.rect(0, 0, W, H, fill=1, stroke=0)
+    c.setFillColor(Color(0.99, 0.86, 0.55)); c.roundRect(40, H * 0.42, W - 80, H * 0.18, 24, fill=1, stroke=0)
+    c.setFont(DISPLAY, 34); c.setFillColor(Color(0.17, 0.18, 0.26))
+    heading = _shape(("كراس التلوين") if rtl else ("Coloring Book"), rtl)
+    c.drawCentredString(W / 2, H * 0.52, heading)
+    c.setFont(DISPLAY, 22); c.setFillColor(Color(0.55, 0.45, 0.2))
+    c.drawCentredString(W / 2, H * 0.455, _shape(title, rtl))
     c.showPage()
 
     for img_bytes in line_pages:
-        c.setFillColorRGB(1, 1, 1)
-        c.rect(0, 0, W, H, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1); c.rect(0, 0, W, H, fill=1, stroke=0)
+        # light rounded frame
+        c.setStrokeColor(Color(0.85, 0.85, 0.82)); c.setLineWidth(2)
+        c.roundRect(18, 18, W - 36, H - 36, 18, fill=0, stroke=1)
         try:
             img = ImageReader(io.BytesIO(img_bytes))
             iw, ih = img.getSize()

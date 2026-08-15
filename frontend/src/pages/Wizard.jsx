@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
@@ -19,7 +19,7 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() +
 
 const emptyChar = (main = false) => ({
   _id: uid(),
-  name: "", age: 5, gender: "boy", hair_color: "", hair_type: "", hair_length: "",
+  name: "", age: 5, gender: "boy",
   hobbies: "", favorite_color: "", favorite_food: "", relation: "", photo_path: "", is_main: main,
 });
 
@@ -27,11 +27,9 @@ export default function Wizard() {
   const { t } = useTranslation();
   const { dir } = useLang();
   const navigate = useNavigate();
-  const fileRef = useRef();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [cfg, setCfg] = useState({ base_price: 3400, extra_character_price: 250 });
-  const [photoState, setPhotoState] = useState({ checking: false, ok: false, msg: "", preview: null });
   const [coupon, setCoupon] = useState({ code: "", discount: 0, checked: false });
   const [form, setForm] = useState({
     characters: [emptyChar(true)],
@@ -65,15 +63,17 @@ export default function Wizard() {
   const subtotal = unit * Math.max(1, form.quantity);
   const total = Math.max(0, subtotal - coupon.discount);
 
-  const handlePhoto = async (file) => {
+  const handlePhoto = async (i, file) => {
     if (!file) return;
-    setPhotoState({ checking: true, ok: false, msg: "", preview: URL.createObjectURL(file) });
+    const preview = URL.createObjectURL(file);
+    setForm((f) => { const c = [...f.characters]; c[i] = { ...c[i], _checking: true, _preview: preview, _msg: "" }; return { ...f, characters: c }; });
     const fd = new FormData(); fd.append("file", file);
     try {
       const { data } = await api.post("/orders/upload-photo", fd);
-      setPhotoState((p) => ({ ...p, checking: false, ok: data.ok, msg: data.message }));
-      if (data.ok) setChar(0, "photo_path", data.path);
-    } catch { setPhotoState((p) => ({ ...p, checking: false, ok: false, msg: t("common.error") })); }
+      setForm((f) => { const c = [...f.characters]; c[i] = { ...c[i], _checking: false, _ok: data.ok, _msg: data.message, photo_path: data.ok ? data.path : c[i].photo_path }; return { ...f, characters: c }; });
+    } catch {
+      setForm((f) => { const c = [...f.characters]; c[i] = { ...c[i], _checking: false, _ok: false, _msg: t("common.error") }; return { ...f, characters: c }; });
+    }
   };
 
   const applyCoupon = async () => {
@@ -84,8 +84,8 @@ export default function Wizard() {
   };
 
   const canNext = () => {
-    const m = form.characters[0];
-    if (step === 1) return m.name.trim() && m.photo_path && photoState.ok;
+    const chars = form.characters;
+    if (step === 1) return chars.every((c) => c.name.trim()) && chars[0].photo_path && chars[0]._ok;
     if (step === 2) return form.story_type;
     if (step === 3) return form.language;
     if (step === 4) return form.lives_with.trim();
@@ -140,31 +140,24 @@ export default function Wizard() {
                           <input data-testid={`char-relation-${i}`} className={inputCls} value={c.relation} onChange={(e) => setChar(i, "relation", e.target.value)} /></div>
                       )}
                       {i === 0 && (
-                        <>
-                          <div className="grid grid-cols-3 gap-2 mt-3">
-                            <div><label className={label}>{t("x.hairColor")}</label><input className={inputCls} value={c.hair_color} onChange={(e) => setChar(i, "hair_color", e.target.value)} /></div>
-                            <div><label className={label}>{t("x.hairType")}</label><input className={inputCls} value={c.hair_type} onChange={(e) => setChar(i, "hair_type", e.target.value)} /></div>
-                            <div><label className={label}>{t("x.hairLength")}</label><input className={inputCls} value={c.hair_length} onChange={(e) => setChar(i, "hair_length", e.target.value)} /></div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 mt-3">
-                            <div><label className={label}>{t("x.hobbies")}</label><input className={inputCls} value={c.hobbies} onChange={(e) => setChar(i, "hobbies", e.target.value)} /></div>
-                            <div><label className={label}>{t("x.favColor")}</label><input className={inputCls} value={c.favorite_color} onChange={(e) => setChar(i, "favorite_color", e.target.value)} /></div>
-                            <div><label className={label}>{t("x.favFood")}</label><input className={inputCls} value={c.favorite_food} onChange={(e) => setChar(i, "favorite_food", e.target.value)} /></div>
-                          </div>
-                          <div className="mt-4">
-                            <label className={label}>{t("wizard.photo")}</label>
-                            <p className="text-xs text-ink/50 mb-2">{t("wizard.photoHint")}</p>
-                            <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => handlePhoto(e.target.files[0])} data-testid="photo-input" />
-                            <button onClick={() => fileRef.current?.click()} data-testid="photo-dropzone"
-                              className="w-full border-2 border-dashed border-terracotta/40 rounded-2xl p-5 bg-white hover:bg-terracotta/10 transition-colors flex flex-col items-center gap-2">
-                              {photoState.preview ? <img src={photoState.preview} alt="" className="w-32 h-32 object-cover rounded-xl shadow" /> : <UploadSimple size={36} weight="duotone" className="text-terracotta" />}
-                              <span className="text-ink/70 text-sm">{t("wizard.photoUpload")}</span>
-                            </button>
-                            {photoState.checking && <p className="mt-2 flex items-center gap-2 text-ink/60 text-sm"><SpinnerGap className="animate-spin" /> {t("wizard.photoChecking")}</p>}
-                            {!photoState.checking && photoState.msg && <p data-testid="photo-msg" className={`mt-2 flex items-center gap-2 text-sm font-medium ${photoState.ok ? "text-sage" : "text-destructive"}`}>{photoState.ok && <CheckCircle weight="fill" />} {photoState.msg}</p>}
-                          </div>
-                        </>
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                          <div><label className={label}>{t("x.hobbies")}</label><input className={inputCls} value={c.hobbies} onChange={(e) => setChar(i, "hobbies", e.target.value)} /></div>
+                          <div><label className={label}>{t("x.favColor")}</label><input className={inputCls} value={c.favorite_color} onChange={(e) => setChar(i, "favorite_color", e.target.value)} /></div>
+                          <div><label className={label}>{t("x.favFood")}</label><input className={inputCls} value={c.favorite_food} onChange={(e) => setChar(i, "favorite_food", e.target.value)} /></div>
+                        </div>
                       )}
+                      <div className="mt-4">
+                        <label className={label}>{t("wizard.photo")}{i > 0 && <span className="text-ink/40 font-normal"> ({t("x.optional")})</span>}</label>
+                        <p className="text-xs text-ink/50 mb-2">{t("wizard.photoHint")}</p>
+                        <label data-testid={`photo-dropzone-${i}`}
+                          className="w-full cursor-pointer border-2 border-dashed border-terracotta/40 rounded-2xl p-5 bg-white hover:bg-terracotta/10 transition-colors flex flex-col items-center gap-2">
+                          <input type="file" accept="image/*" hidden onChange={(e) => handlePhoto(i, e.target.files[0])} data-testid={`photo-input-${i}`} />
+                          {c._preview ? <img src={c._preview} alt="" className="w-32 h-32 object-cover rounded-xl shadow" /> : <UploadSimple size={36} weight="duotone" className="text-terracotta" />}
+                          <span className="text-ink/70 text-sm">{t("wizard.photoUpload")}</span>
+                        </label>
+                        {c._checking && <p className="mt-2 flex items-center gap-2 text-ink/60 text-sm"><SpinnerGap className="animate-spin" /> {t("wizard.photoChecking")}</p>}
+                        {!c._checking && c._msg && <p data-testid={`photo-msg-${i}`} className={`mt-2 flex items-center gap-2 text-sm font-medium ${c._ok ? "text-sage" : "text-destructive"}`}>{c._ok && <CheckCircle weight="fill" />} {c._msg}</p>}
+                      </div>
                     </div>
                   ))}
                   {form.characters.length < 4 && (
