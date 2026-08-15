@@ -53,10 +53,19 @@ async def generate_story(child_name: str, child_age: int, child_gender: str,
         f"Story type: {type_desc}. {focus_line} {ctx_line}\n"
         f"The story must have exactly {NUM_STORY_PAGES} pages. Each page has 2-4 short sentences "
         f"suitable for a {child_age}-year-old. Use the child's name naturally.\n\n"
+        f"CRITICAL NARRATIVE RULES:\n"
+        f"1. Within EACH page, the sentences must be in correct chronological reading order: "
+        f"beginning -> development -> end of that moment. Never place a concluding sentence before the "
+        f"sentence that sets it up. The reader reads top-to-bottom in natural event order.\n"
+        f"2. Across the {NUM_STORY_PAGES} pages the plot must flow logically: setup, rising action, "
+        f"turning point, resolution, gentle ending. Page N must continue directly from page N-1.\n"
+        f"3. Write flawless {lang_name}: correct spelling, no missing letters, correct spacing between "
+        f"words, and correct punctuation. Re-read each sentence before finalising.\n"
+        f"4. Keep each sentence self-contained and clear; avoid ambiguous pronouns.\n\n"
         f"Return ONLY this JSON (no markdown fences):\n"
         f'{{"title": "story title in {lang_name}", '
         f'"moral": "one gentle takeaway line in {lang_name}", '
-        f'"pages": [{{"text": "page text in {lang_name}", '
+        f'"pages": [{{"text": "page text in {lang_name}, sentences in correct chronological order", '
         f'"scene": "vivid ENGLISH illustration description of this page featuring the child in a scene"}}]}}'
     )
 

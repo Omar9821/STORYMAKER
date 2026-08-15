@@ -263,6 +263,23 @@ export default function AdminDashboard() {
               {selected.versions?.length > 0 && <Row label={t("x.versions")} value={selected.versions.length} />}
             </div>
 
+            <div className="soft-card p-4 mb-4 text-sm space-y-1" data-testid="order-input-data">
+              <h3 className="font-bold text-navy mb-2">{t("x.inputData")}</h3>
+              {selected.created_at && <Row label={t("x.orderDate")} value={new Date(selected.created_at).toLocaleString()} />}
+              <Row label={t("wizard.childAge")} value={`${selected.child_age} · ${selected.child_gender === "girl" ? t("wizard.girl") : t("wizard.boy")}`} />
+              {selected.characters?.[0]?.hobbies && <Row label={t("x.hobbies")} value={selected.characters[0].hobbies} />}
+              {selected.characters?.[0]?.favorite_color && <Row label={t("x.favColor")} value={selected.characters[0].favorite_color} />}
+              {selected.characters?.[0]?.favorite_food && <Row label={t("x.favFood")} value={selected.characters[0].favorite_food} />}
+              {selected.characters?.length > 1 && <Row label={t("x.characters")} value={selected.characters.slice(1).map((c) => `${c.name}${c.relation ? ` (${c.relation})` : ""}`).join("، ")} />}
+              {selected.lives_with && <Row label={t("x.livesWith")} value={selected.lives_with} />}
+              {selected.positive_behaviors && <Row label={t("x.posBehaviors")} value={selected.positive_behaviors} />}
+              {selected.negative_behaviors && <Row label={t("x.negBehaviors")} value={selected.negative_behaviors} />}
+              {selected.special_details && <Row label={t("x.specialDetails")} value={selected.special_details} />}
+              {selected.story_setting?.length > 0 && <Row label={t("x.place")} value={selected.story_setting.join("، ")} />}
+              <Row label={t("wizard.language")} value={(selected.language || "").toUpperCase()} />
+              {selected.story_moral && <Row label={t("x.moral")} value={selected.story_moral} />}
+            </div>
+
             <div className="flex flex-wrap gap-2 mb-4">
               <ActBtn onClick={() => setStatus(selected.id, "approved")} icon={CheckCircle} label={t("admin.approve")} testid="act-approve" />
               {!selected.reference_photo_deleted && <>

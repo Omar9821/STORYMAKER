@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 7: validated 3 structural engine fixes end-to-end. Backend: 12/12 pytest cases PASS in /app/backend/tests/test_iter7_engine_fixes.py (~8.5s). Confirmed (a) pdf_service.make_line_art returns a valid PNG (magic bytes + PIL-openable) for both 500x500 and 100x100 inputs — new adaptive-threshold + morphological close engine is wired and does not crash; (b) POST /api/admin/orders/{id}/rebuild-pdf on the real عمر order returns {ok:true}, and GET /api/files/{coloring_pdf_path} returns HTTP 200 application/pdf starting with %PDF-, with page count >=2 (cover + coloring pages) — page number + حكايتي badge layout applied; (c) POST /api/admin/orders/{id}/regenerate on عمر (reference_photo_deleted=false) returns {ok:true} and enqueues the background job using stored order fields (no extra input needed). Regression: /api/config exposes coloring_price=500 & coloring_original_price=2800; POST /api/orders with add_coloring=true adds exactly 500 DZD; orders created as awaiting_payment/pending with NO auto-generation; /api/admin/stats, /api/admin/orders (+status/search filters), DELETE, bulk (empty + unknown action guarded 400), and restore-version 404 guard all OK. Frontend: admin login OK; opening the عمر order drawer renders the data-testid='order-input-data' section with ALL submitted fields (order date, age/gender, hobbies=السباحة, fav color=الاصفر, fav food=خضروات, characters=زينب(اخت), lives_with=العائلة, positive_behaviors=الصدق, negative_behaviors=الكذب و السرقة, story setting=home, school, language=AR, moral). Real orders (عمر / محمد) preserved; TEST_ orders cleaned up via delete fixture.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter7_engine_fixes.py",
+    "/app/test_reports/pytest/iter7.xml"
+  ],
+  "action_items": [
+    "NONE — all 3 iteration-7 structural fixes validated. Ready to ship.",
+    "Carry-over (non-blocking): server.py ~935 lines — consider splitting admin router into a sub-module."
+  ],
+  "critical_code_review_comments": [
+    "pdf_service.make_line_art: adaptive local mean (GaussianBlur radius 9) + morphological close (MinFilter->MaxFilter) is a solid, dependency-free rewrite. Confirmed non-crashing on both large and 100x100 inputs. Output is a proper single-channel-as-RGB PNG.",
+    "pdf_service.build_coloring_pdf: logo_badge() drawn per coloring page + page-number circle at bottom (matches story pages) — verified via rebuild-pdf + fetched PDF.",
+    "ai_service.generate_story: prompt now enforces (1) chronological within-page order, (2) cross-page logical flow, (3) flawless Arabic spelling/spacing/punctuation, (4) self-contained sentences. Prompt-level change — not deterministically unit-testable, but structure and JSON contract unchanged (still returns 5 pages).",
+    "server.regenerate_single_page and regenerate_text_only both call snapshot_version() before overwriting — version history is correctly appended on each regeneration. server.admin_regenerate (full rebuild) does NOT snapshot (matches previous behaviour — full regens replace the run, partial regens keep history).",
+    "AdminDashboard.jsx L266-281: 'order-input-data' block correctly conditional-renders every submitted field with Row helpers; all fields verified visible in the live عمر order drawer.",
+    "server.admin_rebuild_pdf correctly refuses when pages/cover missing (400) — good defensive guard."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter7_engine_fixes.py (new)"],
+  "success_rate": {"backend": "12/12 (100%)", "frontend": "1/1 admin drawer input-data render PASS"},
+  "test_credentials": "admin@hikayati.dz / Hikayati@2026 — LOGIN OK",
+  "seed_data_creation": "Ephemeral TEST_ orders created via public /api/orders and cleaned up in a module-scoped autouse fixture. The 3 real orders (عمر, 2× محمد) were NOT modified in any destructive way; rebuild-pdf and regenerate were exercised on عمر but that is idempotent (no new inputs, existing data). No fal.ai background wait.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_iter7_engine_fixes.py can be re-run standalone (needs REACT_APP_BACKEND_URL exported OR run via pytest with env inherited). It selects a real generated order (prefers one with reference_photo_deleted=false) and calls rebuild-pdf + regenerate — safe (no user-visible data lost). Cleanup fixture deletes only TEST_ prefixed orders it created. The Claude narrative-order/spelling prompt change is subjective quality — do NOT attempt to unit-test the LLM output text; just confirm generate_story still returns 5 pages if you need to touch it.",
+  "rca of the issue": "N/A — this iteration is a set of engine improvements (prompt hardening, adaptive-threshold coloring engine, admin UX input-data section + history-aware regenerate). All contracts preserved; endpoints and payload shape unchanged. The one thing to watch in production is coloring-book PDF appearance across diverse illustrations — the adaptive threshold C=9.0 may need tuning per art style if outlines come out too dense or too sparse; this is a hyperparameter comment, not a bug."
+}

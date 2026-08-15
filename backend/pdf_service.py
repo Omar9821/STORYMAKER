@@ -264,23 +264,27 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
 
 
 def make_line_art(image_bytes: bytes) -> bytes:
-    """Colour illustration -> clean, medium-weight coloring-book outline (PNG)."""
+    """Colour illustration -> clean coloring-book outline with COMPLETE, BOLD, uniform lines
+    that keep both the full characters and the key background elements (adaptive local
+    thresholding + morphological closing, instead of a sketch filter that drops parts)."""
     img = Image.open(io.BytesIO(image_bytes)).convert("L")
     img = ImageOps.autocontrast(img)
-    smooth = img.filter(ImageFilter.MedianFilter(5)).filter(ImageFilter.GaussianBlur(1.2))
-    inv = ImageOps.invert(smooth)
-    blur = inv.filter(ImageFilter.GaussianBlur(12))
-    g = np.asarray(smooth, dtype=np.float32)
-    b = np.asarray(blur, dtype=np.float32)
-    sketch = np.minimum(255.0, g * 255.0 / np.maximum(255.0 - b, 1.0))
-    edges = np.asarray(smooth.filter(ImageFilter.FIND_EDGES), dtype=np.float32)
-    combined = np.clip(sketch - edges * 1.2, 0, 255)
-    out = np.where(combined < 168, 0, 255).astype("uint8")
-    result = Image.fromarray(out, "L")
-    # despeckle, then give clean MEDIUM line weight (not hairline, not heavy)
-    result = result.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.MinFilter(3))
+    # denoise while preserving edges
+    base = img.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.GaussianBlur(0.6))
+    g = np.asarray(base, dtype=np.float32)
+    # local mean (large blur) -> adaptive threshold keeps outlines of ALL elements (character
+    # body, clothes, window, plants...) as closed dark lines, not just high-contrast edges.
+    local_mean = np.asarray(base.filter(ImageFilter.GaussianBlur(9)), dtype=np.float32)
+    C = 9.0
+    dark = g < (local_mean - C)
+    out = np.where(dark, 0, 255).astype("uint8")
+    res = Image.fromarray(out, "L")
+    # morphological CLOSE (dilate then erode) to seal small gaps -> complete closed contours
+    res = res.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
+    # despeckle stray dots, then set a BOLD uniform line weight
+    res = res.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.MinFilter(3))
     buf = io.BytesIO()
-    result.convert("RGB").save(buf, "PNG")
+    res.convert("RGB").save(buf, "PNG")
     return buf.getvalue()
 
 
@@ -290,32 +294,49 @@ def build_coloring_pdf(title: str, line_pages: list, language: str) -> bytes:
     buf = io.BytesIO()
     W, H = A4
     c = canvas.Canvas(buf, pagesize=A4)
-    margin = 30
+    margin = 34
+
+    def logo_badge():
+        label = _shape("حكايتي" if rtl else "Hikayati", rtl)
+        c.setFont(DISPLAY, 15)
+        tw = pdfmetrics.stringWidth(label, DISPLAY, 15)
+        bw = tw + 28
+        x = W - bw - 26
+        c.setFillColor(Color(0.88, 0.48, 0.37))
+        c.roundRect(x, H - 52, bw, 30, 15, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1)
+        c.drawString(x + 14, H - 45, label)
 
     # cover
     c.setFillColorRGB(1, 1, 1); c.rect(0, 0, W, H, fill=1, stroke=0)
     c.setFillColor(Color(0.99, 0.86, 0.55)); c.roundRect(40, H * 0.42, W - 80, H * 0.18, 24, fill=1, stroke=0)
     c.setFont(DISPLAY, 34); c.setFillColor(Color(0.17, 0.18, 0.26))
-    heading = _shape(("كراس التلوين") if rtl else ("Coloring Book"), rtl)
-    c.drawCentredString(W / 2, H * 0.52, heading)
+    c.drawCentredString(W / 2, H * 0.52, _shape("كراس التلوين" if rtl else "Coloring Book", rtl))
     c.setFont(DISPLAY, 22); c.setFillColor(Color(0.55, 0.45, 0.2))
     c.drawCentredString(W / 2, H * 0.455, _shape(title, rtl))
     c.showPage()
 
-    for img_bytes in line_pages:
+    for i, img_bytes in enumerate(line_pages):
         c.setFillColorRGB(1, 1, 1); c.rect(0, 0, W, H, fill=1, stroke=0)
-        # light rounded frame
+        logo_badge()
+        # framed drawing area
+        top = H - 80
+        bottom = 70
         c.setStrokeColor(Color(0.85, 0.85, 0.82)); c.setLineWidth(2)
-        c.roundRect(18, 18, W - 36, H - 36, 18, fill=0, stroke=1)
+        c.roundRect(18, bottom - 12, W - 36, (top - bottom) + 24, 18, fill=0, stroke=1)
         try:
             img = ImageReader(io.BytesIO(img_bytes))
             iw, ih = img.getSize()
-            aw, ah = W - 2 * margin, H - 2 * margin
+            aw, ah = W - 2 * margin, (top - bottom)
             ratio = min(aw / iw, ah / ih)
             dw, dh = iw * ratio, ih * ratio
-            c.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh)
+            c.drawImage(img, (W - dw) / 2, bottom + (ah - dh) / 2, dw, dh)
         except Exception:
             pass
+        # page number badge (matches story pages)
+        c.setFillColor(Color(0.88, 0.48, 0.37)); c.circle(W / 2, 34, 15, fill=1, stroke=0)
+        c.setFont(DISPLAY, 14); c.setFillColorRGB(1, 1, 1)
+        c.drawCentredString(W / 2, 29, str(i + 1))
         c.showPage()
 
     c.save()
