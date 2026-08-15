@@ -183,6 +183,7 @@ export default function AdminDashboard() {
               <Row label={t("wizard.address")} value={`${selected.shipping_address}, ${selected.wilaya}`} />
               <Row label={t("x.total")} value={`${selected.amount} DZD (${selected.extra_characters || 0}×${selected.extra_character_price || 0})`} />
               <Row label={t("track.status")} value={t(`track.st_${selected.status}`)} />
+              <Row label={t("x.payment")} value={selected.payment_status === "cod_pending" ? t("x.payConfirmed") : selected.payment_status === "paid" ? t("x.payPaid") : t("x.payPending")} />
               <Row label={t("admin.aiCost")} value={`$${selected.ai_cost_usd || 0}`} />
               {selected.art_style && <Row label={t("x.artStyle")} value={t(`x.style${selected.art_style === "3d" ? "3d" : selected.art_style.charAt(0).toUpperCase() + selected.art_style.slice(1)}`)} />}
               {selected.avg_similarity != null && <Row label={t("admin.similarity")} value={`${selected.avg_similarity} (MOCK)`} />}
@@ -192,7 +193,7 @@ export default function AdminDashboard() {
 
             <div className="flex flex-wrap gap-2 mb-4">
               <ActBtn onClick={() => setStatus(selected.id, "approved")} icon={CheckCircle} label={t("admin.approve")} testid="act-approve" />
-              <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate`), "regenerating")} icon={ArrowClockwise} label={t("admin.regenerate")} testid="act-regenerate" />
+              <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate`), selected.pages?.length ? t("admin.regenerate") : t("x.generate"))} icon={ArrowClockwise} label={selected.pages?.length ? t("admin.regenerate") : t("x.generate")} testid="act-regenerate" />
               <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate-text`), t("x.regenText"))} icon={TextT} label={t("x.regenText")} testid="act-regen-text" />
               <ActBtn onClick={() => setStatus(selected.id, "printing")} icon={Printer} label={t("admin.markPrinting")} testid="act-printing" />
               <ActBtn onClick={() => setStatus(selected.id, "shipped")} icon={Truck} label={t("admin.markShipped")} testid="act-shipped" />

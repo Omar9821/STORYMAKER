@@ -34,7 +34,7 @@ export default function Track() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (!order) return;
-    if (["paid", "generating"].includes(order.status)) {
+    if (["generating"].includes(order.status)) {
       const id = setInterval(load, 5000);
       return () => clearInterval(id);
     }
@@ -80,7 +80,15 @@ export default function Track() {
               )}
             </div>
 
-            {["paid", "generating"].includes(order.status) && (
+            {order.status === "awaiting_payment" && (
+              <div className="soft-card p-8 mb-6 flex flex-col items-center text-center bg-sage/5" data-testid="order-received-box">
+                <CheckCircle size={44} weight="fill" className="text-sage mb-3" />
+                <p className="text-xl font-extrabold text-navy mb-1">{t("track.confirmTitle")}</p>
+                <p className="text-ink/60 max-w-sm">{t("track.confirmMsg")}</p>
+              </div>
+            )}
+
+            {["generating"].includes(order.status) && (
               <div className="soft-card p-8 mb-6 flex flex-col items-center text-center" data-testid="generating-box">
                 <SpinnerGap size={44} className="animate-spin text-terracotta mb-3" />
                 <p className="font-bold text-navy">{t("track.generating")}</p>

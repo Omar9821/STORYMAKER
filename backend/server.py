@@ -550,7 +550,7 @@ async def create_order(body: OrderCreate):
         "payment_method": None,
         "payment_status": "pending",
         "status": "awaiting_payment",
-        "status_history": [{"status": "awaiting_payment", "note": "تم إنشاء الطلب", "timestamp": now_iso()}],
+        "status_history": [{"status": "awaiting_payment", "note": "تم استلام الطلب، بانتظار التأكيد الهاتفي", "timestamp": now_iso()}],
         "pages": [],
         "versions": [],
         "ai_cost_usd": 0,
@@ -574,18 +574,11 @@ async def pay_order(order_id: str, body: PayBody):
     if body.method == "cod":
         await db.orders.update_one({"id": order_id}, {"$set": {
             "payment_method": "cod", "payment_status": "cod_pending"}})
-        await push_status(order_id, "paid", "تم تأكيد الطلب (الدفع عند الاستلام)")
-        asyncio.create_task(run_generation(order_id))
+        await push_status(order_id, "awaiting_payment", "تم تأكيد الطلب (الدفع عند الاستلام) — بانتظار التوليد")
         return {"method": "cod", "order_id": order_id, "redirect": f"/track/{order_id}"}
 
-    # Chargily / online
-    checkout = await payment_service.create_checkout(order_id, order["amount"], body.payment_method)
-    await db.orders.update_one({"id": order_id}, {"$set": {
-        "payment_method": "chargily",
-        "chargily_checkout_id": checkout["checkout_id"],
-        "checkout_url": checkout["checkout_url"],
-    }})
-    return {"method": "chargily", "checkout_url": checkout["checkout_url"], "mock": checkout["mock"]}
+    # Online payment (Chargily) is not enabled yet — manual/COD only for now.
+    raise HTTPException(status_code=400, detail="المدفوعات الإلكترونية غير مفعّلة حالياً — الدفع عند الاستلام فقط")
 
 
 @api.post("/payments/mock-confirm/{order_id}")
@@ -729,6 +722,10 @@ async def admin_regenerate(order_id: str, payload: dict = Depends(auth.require_a
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     if order.get("reference_photo_deleted"):
         raise HTTPException(status_code=400, detail="تم حذف صورة المرجع، لا يمكن إعادة التوليد")
+    # Admin confirms the order manually (by phone) before generating.
+    if order.get("payment_status") == "pending":
+        await db.orders.update_one({"id": order_id}, {"$set": {
+            "payment_method": "cod", "payment_status": "cod_pending"}})
     asyncio.create_task(run_generation(order_id))
     return {"ok": True}
 
