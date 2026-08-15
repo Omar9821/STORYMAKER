@@ -111,7 +111,7 @@ class OrderCreate(BaseModel):
     language: str
     language_level: str = "simple"
     art_style: str = "cartoon"  # cartoon | watercolor | 3d
-    book_type: str = "colored"  # colored | coloring
+    add_coloring: bool = False  # optional coloring-book add-on (discounted bundle)
     story_setting: list[str] = []
     lives_with: str
     mother_name: str = ""
@@ -143,6 +143,7 @@ class SettingsBody(BaseModel):
     base_price: int
     extra_character_price: int
     coloring_price: int = 500
+    coloring_original_price: int = 2800
 
 
 class TicketBody(BaseModel):
@@ -158,11 +159,14 @@ class TicketReplyBody(BaseModel):
 async def get_settings() -> dict:
     s = await db.settings.find_one({"_id": "config"})
     if not s:
-        s = {"_id": "config", "base_price": BOOK_PRICE, "extra_character_price": 250, "coloring_price": 500}
+        s = {"_id": "config", "base_price": BOOK_PRICE, "extra_character_price": 250,
+             "coloring_price": 500, "coloring_original_price": 2800}
         await db.settings.insert_one(s)
-    if "coloring_price" not in s:
-        s["coloring_price"] = 500
-        await db.settings.update_one({"_id": "config"}, {"$set": {"coloring_price": 500}})
+    defaults = {"coloring_price": 500, "coloring_original_price": 2800}
+    patch = {k: v for k, v in defaults.items() if k not in s}
+    if patch:
+        s.update(patch)
+        await db.settings.update_one({"_id": "config"}, {"$set": patch})
     return s
 
 
@@ -449,6 +453,7 @@ async def config():
     return {"price": s["base_price"], "base_price": s["base_price"],
             "extra_character_price": s["extra_character_price"],
             "coloring_price": s["coloring_price"],
+            "coloring_original_price": s["coloring_original_price"],
             "currency": "DZD", "payment_mock": payment_service.MOCK_MODE}
 
 
@@ -505,8 +510,9 @@ async def create_order(body: OrderCreate):
 
     settings = await get_settings()
     n_extra = max(0, len(body.characters) - 1)
-    base = settings["coloring_price"] if body.book_type == "coloring" else settings["base_price"]
-    unit = base + n_extra * settings["extra_character_price"]
+    unit = settings["base_price"] + n_extra * settings["extra_character_price"]
+    if body.add_coloring:
+        unit += settings["coloring_price"]
     subtotal = unit * max(1, body.quantity)
     discount, coupon = await compute_coupon(body.coupon_code, subtotal)
     amount = subtotal - discount
@@ -529,7 +535,7 @@ async def create_order(body: OrderCreate):
         "language": body.language,
         "story_level": body.language_level,
         "art_style": body.art_style,
-        "book_type": body.book_type,
+        "add_coloring": body.add_coloring,
         "story_setting": body.story_setting,
         "extra_context": build_story_context(body),
         "lives_with": body.lives_with,
@@ -764,8 +770,9 @@ async def admin_update_status(order_id: str, body: StatusUpdateBody, payload: di
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
     await push_status(order_id, body.status, body.note or "")
-    # Auto-delete reference photo once approved (privacy)
-    if body.status == "approved" and not order.get("reference_photo_deleted"):
+    # Auto-delete reference photo once the book has shipped (privacy) — kept until
+    # then so the admin can still fix/regenerate pages during review & printing.
+    if body.status in ("shipped", "delivered") and not order.get("reference_photo_deleted"):
         await db.orders.update_one({"id": order_id}, {"$set": {"reference_photo_deleted": True}})
     return {"ok": True}
 
@@ -807,14 +814,15 @@ async def admin_privacy_logs(payload: dict = Depends(auth.require_admin)):
 @api.get("/admin/settings")
 async def admin_get_settings(payload: dict = Depends(auth.require_admin)):
     s = await get_settings()
-    return {"base_price": s["base_price"], "extra_character_price": s["extra_character_price"], "coloring_price": s["coloring_price"]}
+    return {"base_price": s["base_price"], "extra_character_price": s["extra_character_price"],
+            "coloring_price": s["coloring_price"], "coloring_original_price": s["coloring_original_price"]}
 
 
 @api.put("/admin/settings")
 async def admin_put_settings(body: SettingsBody, payload: dict = Depends(auth.require_admin)):
     await db.settings.update_one({"_id": "config"}, {"$set": {
         "base_price": body.base_price, "extra_character_price": body.extra_character_price,
-        "coloring_price": body.coloring_price}}, upsert=True)
+        "coloring_price": body.coloring_price, "coloring_original_price": body.coloring_original_price}}, upsert=True)
     return {"ok": True}
 
 

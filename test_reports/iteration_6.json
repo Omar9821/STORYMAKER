@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 6: verified BUG FIX (approve no longer deletes ref photo; ship/deliver still does), regenerate 400 guard, coloring add-on pricing (+500 DZD), admin settings CRUD for 4 pricing fields, plus regression on stats/orders/bulk/delete/rebuild-pdf/restore-version guards. All 15 pytest cases in /app/backend/tests/test_bugfix_and_coloring.py PASS (3.08s). Frontend: admin drawer correctly HIDES act-regenerate / act-regen-text / act-delete-photo when reference_photo_deleted=true and SHOWS them when false; wizard addon-coloring toggle increases wizard-total by exactly 500 DZD (3400 -> 3900) and toggling off restores it. All test orders were created and cleaned up via DELETE /api/admin/orders/{id}; the 3 pre-existing real orders were untouched.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bugfix_and_coloring.py",
+    "/app/test_reports/pytest/bugfix_coloring.xml"
+  ],
+  "action_items": [
+    "NONE — all review items validated end-to-end. Ready to ship."
+  ],
+  "critical_code_review_comments": [
+    "server.py admin_update_status now deletes the reference photo only for shipped/delivered — verified via lifecycle test (approve keeps flag false, ship flips it true). Clean, minimal change.",
+    "admin_regenerate still guards on order['reference_photo_deleted'] with the correct Arabic message and 400 — verified.",
+    "create_order pricing correctly adds settings['coloring_price'] to unit when body.add_coloring is True (server.py L514-515), and add_coloring is persisted on the order document — verified via admin GET.",
+    "get_settings backfills coloring_price / coloring_original_price defaults for pre-existing settings docs (nice migration on read).",
+    "AdminDashboard.jsx drawer gates ActBtns (act-regenerate, act-regen-text, act-delete-photo) behind !selected.reference_photo_deleted (L268-275) and renders download-print card with admin-pdf + admin-coloring-pdf when paths are set — matches contract.",
+    "Wizard.jsx step-5 unit calc includes cfg.coloring_price when add_coloring is true (L62) and total-shown data-testid wizard-total updates immediately.",
+    "server.py is now ~935 lines — repeat recommendation to split admin routes into a sub-router (unchanged carry-over from iterations 3-5)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bugfix_and_coloring.py (new)"
+  ],
+  "success_rate": {"backend": "15/15 (100%)", "frontend": "core drawer + wizard flows PASS"},
+  "test_credentials": "admin@hikayati.dz / Hikayati@2026 — LOGIN OK",
+  "seed_data_creation": "Ephemeral TEST_ orders created via public /api/orders and cleaned up via DELETE /api/admin/orders/{id}. No production/seed data touched. The 3 real orders (محمد, عمر ...) were preserved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_bugfix_and_coloring.py is safe to re-run — it uses TEST_ prefixed customer names and cleans up module-scoped orders via a fixture. Uses -n 2 loadscope from backend/pytest.ini automatically. It does NOT wait for the fal.ai background generation; it only asserts the regenerate call returns {ok:true} and that the reference_photo_deleted transitions are correct on approve vs ship. Real fal.ai generation is only exercised by the older test_manual_cod_lifecycle.py / backend_test.py suites if needed.",
+  "rca of the issue": "Original bug: approving an order flipped reference_photo_deleted=true, which then made admin_regenerate raise 400 with the Arabic 'reference photo deleted' error, blocking the admin from regenerating during printing. Fix (verified): the deletion trigger was moved from the 'approved' status transition to 'shipped'/'delivered' only, and the admin drawer additionally hides the regen/regen-text/delete-photo actions when the flag is already true, and instead surfaces the story-book & coloring-book download PDFs prominently."
+}

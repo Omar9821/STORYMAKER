@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   SignOut, Package, Coins, ChartBar, X, ArrowClockwise, CheckCircle, Truck, Printer,
-  FilePdf, Trash, BookOpenText, ClockCounterClockwise, TextT, Ticket, Tag, ChartLineUp, CaretDown, MagnifyingGlass,
+  FilePdf, Trash, BookOpenText, ClockCounterClockwise, TextT, Ticket, Tag, ChartLineUp, CaretDown, MagnifyingGlass, Warning,
 } from "@phosphor-icons/react";
 import { api, fileUrl } from "../lib/api";
 
@@ -25,7 +25,7 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const [settings, setSettings] = useState({ base_price: 3400, extra_character_price: 250, coloring_price: 500 });
+  const [settings, setSettings] = useState({ base_price: 3400, extra_character_price: 250, coloring_price: 500, coloring_original_price: 2800 });
   const [selected, setSelected] = useState(null);
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent", value: 10, max_uses: 0 });
   const [expandedVer, setExpandedVer] = useState(null);
@@ -174,7 +174,9 @@ export default function AdminDashboard() {
               <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.extraCharPrice")} (DZD)</label>
               <input type="number" data-testid="extra-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-3" value={settings.extra_character_price} onChange={(e) => setSettings((s) => ({ ...s, extra_character_price: Number(e.target.value) }))} />
               <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.coloringPrice")}</label>
-              <input type="number" data-testid="coloring-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-4" value={settings.coloring_price ?? 500} onChange={(e) => setSettings((s) => ({ ...s, coloring_price: Number(e.target.value) }))} />
+              <input type="number" data-testid="coloring-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-3" value={settings.coloring_price ?? 500} onChange={(e) => setSettings((s) => ({ ...s, coloring_price: Number(e.target.value) }))} />
+              <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.coloringOrigPrice")}</label>
+              <input type="number" data-testid="coloring-orig-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-4" value={settings.coloring_original_price ?? 2800} onChange={(e) => setSettings((s) => ({ ...s, coloring_original_price: Number(e.target.value) }))} />
               <button onClick={saveSettings} data-testid="save-settings" className="bg-terracotta text-white font-bold px-6 py-2.5 rounded-full">{t("x.save")}</button>
             </div>
             <div className="soft-card p-6">
@@ -255,7 +257,7 @@ export default function AdminDashboard() {
               <Row label={t("x.payment")} value={selected.payment_status === "cod_pending" ? t("x.payConfirmed") : selected.payment_status === "paid" ? t("x.payPaid") : t("x.payPending")} />
               <Row label={t("admin.aiCost")} value={`$${selected.ai_cost_usd || 0}`} />
               {selected.art_style && <Row label={t("x.artStyle")} value={t(`x.style${selected.art_style === "3d" ? "3d" : selected.art_style.charAt(0).toUpperCase() + selected.art_style.slice(1)}`)} />}
-              <Row label={t("x.bookType")} value={selected.book_type === "coloring" ? t("x.bookColoring") : t("x.bookColored")} />
+              <Row label={t("x.addColoring")} value={selected.add_coloring ? "✓" : "—"} />
               {selected.avg_similarity != null && <Row label={t("admin.similarity")} value={`${selected.avg_similarity} (MOCK)`} />}
               <Row label={t("admin.refDeleted")} value={selected.reference_photo_deleted ? "✓" : "—"} />
               {selected.versions?.length > 0 && <Row label={t("x.versions")} value={selected.versions.length} />}
@@ -263,14 +265,27 @@ export default function AdminDashboard() {
 
             <div className="flex flex-wrap gap-2 mb-4">
               <ActBtn onClick={() => setStatus(selected.id, "approved")} icon={CheckCircle} label={t("admin.approve")} testid="act-approve" />
-              <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate`), selected.pages?.length ? t("admin.regenerate") : t("x.generate"))} icon={ArrowClockwise} label={selected.pages?.length ? t("admin.regenerate") : t("x.generate")} testid="act-regenerate" />
-              <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate-text`), t("x.regenText"))} icon={TextT} label={t("x.regenText")} testid="act-regen-text" />
+              {!selected.reference_photo_deleted && <>
+                <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate`), selected.pages?.length ? t("admin.regenerate") : t("x.generate"))} icon={ArrowClockwise} label={selected.pages?.length ? t("admin.regenerate") : t("x.generate")} testid="act-regenerate" />
+                <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate-text`), t("x.regenText"))} icon={TextT} label={t("x.regenText")} testid="act-regen-text" />
+              </>}
               <ActBtn onClick={() => setStatus(selected.id, "printing")} icon={Printer} label={t("admin.markPrinting")} testid="act-printing" />
               <ActBtn onClick={() => setStatus(selected.id, "shipped")} icon={Truck} label={t("admin.markShipped")} testid="act-shipped" />
-              <ActBtn onClick={() => setStatus(selected.id, "delivered")} icon={FilePdf} label={t("admin.markDelivered")} testid="act-delivered" />
-              <ActBtn onClick={() => act(() => api.delete(`/admin/orders/${selected.id}/reference-photo`), "deleted")} icon={Trash} label={t("admin.deletePhoto")} danger testid="act-delete-photo" />
+              <ActBtn onClick={() => setStatus(selected.id, "delivered")} icon={CheckCircle} label={t("admin.markDelivered")} testid="act-delivered" />
+              {!selected.reference_photo_deleted && <ActBtn onClick={() => act(() => api.delete(`/admin/orders/${selected.id}/reference-photo`), "deleted")} icon={Trash} label={t("admin.deletePhoto")} danger testid="act-delete-photo" />}
               <ActBtn onClick={() => { if (window.confirm(t("x.confirmDelete"))) delOrder(selected.id); }} icon={Trash} label={t("x.delete")} danger testid="act-delete-order" />
             </div>
+            {selected.reference_photo_deleted && <p className="text-xs text-ink/50 -mt-2 mb-4 flex items-center gap-1.5"><Warning size={14} weight="fill" className="text-sand" /> {t("x.refDeletedNote")}</p>}
+
+            {(selected.pdf_path || selected.coloring_pdf_path) && (
+              <div className="soft-card p-4 mb-4">
+                <h3 className="font-bold text-navy mb-2 text-sm">{t("x.downloadPrint")}</h3>
+                <div className="flex flex-wrap gap-2">
+                  {selected.pdf_path && <a href={fileUrl(selected.pdf_path)} target="_blank" rel="noreferrer" data-testid="admin-pdf" className="inline-flex items-center gap-2 bg-navy text-white font-bold px-5 py-2.5 rounded-full hover:brightness-110"><FilePdf weight="duotone" /> {t("x.storyBook")}</a>}
+                  {selected.coloring_pdf_path && <a href={fileUrl(selected.coloring_pdf_path)} target="_blank" rel="noreferrer" data-testid="admin-coloring-pdf" className="inline-flex items-center gap-2 bg-sage text-white font-bold px-5 py-2.5 rounded-full hover:brightness-110"><FilePdf weight="duotone" /> {t("x.coloringBook")}</a>}
+                </div>
+              </div>
+            )}
 
             {selected.pages?.length > 0 && (
               <div>
@@ -285,10 +300,6 @@ export default function AdminDashboard() {
                         className="absolute top-1 start-1 bg-white/90 rounded-full p-1 text-terracotta shadow hover:bg-white" title={t("x.regenPage")}><ArrowClockwise size={14} weight="bold" /></button>
                     </div>
                   ))}
-                </div>
-                <div className="mt-4 flex gap-2">
-                  {selected.pdf_path && <a href={fileUrl(selected.pdf_path)} target="_blank" rel="noreferrer" data-testid="admin-pdf" className="inline-flex items-center gap-2 bg-navy text-white font-bold px-5 py-2.5 rounded-full"><FilePdf weight="duotone" /> PDF</a>}
-                  {selected.coloring_pdf_path && <a href={fileUrl(selected.coloring_pdf_path)} target="_blank" rel="noreferrer" data-testid="admin-coloring-pdf" className="inline-flex items-center gap-2 bg-sage text-white font-bold px-5 py-2.5 rounded-full"><FilePdf weight="duotone" /> 🎁 Coloring</a>}
                 </div>
                 {selected.versions?.length > 0 && (
                   <div className="mt-5">

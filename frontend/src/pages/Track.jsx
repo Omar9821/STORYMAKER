@@ -129,20 +129,20 @@ export default function Track() {
                   )}
                   {order.pages.map((p) => (
                     <div key={p.page_number} className="relative">
-                      <img src={fileUrl(order.book_type === "coloring" && p.coloring_path ? p.coloring_path : p.image_path)} alt={`page ${p.page_number}`} className="rounded-xl shadow aspect-[3/4] object-cover bg-white" />
+                      <img src={fileUrl(p.image_path)} alt={`page ${p.page_number}`} className="rounded-xl shadow aspect-[3/4] object-cover bg-white" />
                     </div>
                   ))}
                 </div>
-                {order.book_type !== "coloring" && order.pdf_path && (
+                {order.pdf_path && (
                   <a href={fileUrl(order.pdf_path)} target="_blank" rel="noreferrer" data-testid="download-pdf"
                     className="mt-5 inline-flex items-center gap-2 bg-navy text-white font-bold px-6 py-3 rounded-full hover:brightness-110 transition-all">
                     <FilePdf weight="duotone" /> {t("track.downloadPdf")}
                   </a>
                 )}
-                {order.coloring_pdf_path && (
+                {(order.add_coloring || order.book_type === "coloring") && order.coloring_pdf_path && (
                   <a href={fileUrl(order.coloring_pdf_path)} target="_blank" rel="noreferrer" data-testid="download-coloring"
                     className="mt-5 ms-3 inline-flex items-center gap-2 bg-sage text-white font-bold px-6 py-3 rounded-full hover:brightness-110 transition-all">
-                    <FilePdf weight="duotone" /> {order.book_type === "coloring" ? "" : "🎁 "}{t("track.downloadColoring")}
+                    <FilePdf weight="duotone" /> 🎨 {t("track.downloadColoring")}
                   </a>
                 )}
               </div>
