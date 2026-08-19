@@ -275,6 +275,8 @@ export default function AdminDashboard() {
               {selected.positive_behaviors && <Row label={t("x.posBehaviors")} value={selected.positive_behaviors} />}
               {selected.negative_behaviors && <Row label={t("x.negBehaviors")} value={selected.negative_behaviors} />}
               {selected.special_details && <Row label={t("x.specialDetails")} value={selected.special_details} />}
+              {selected.favorite_things && <Row label={t("x.favThingsLabel")} value={selected.favorite_things} />}
+              {(selected.pet_name || selected.pet_type) && <Row label={t("x.petLabel")} value={`${selected.pet_name || ""}${selected.pet_type ? ` (${selected.pet_type})` : ""}`} />}
               {selected.story_setting?.length > 0 && <Row label={t("x.place")} value={selected.story_setting.join("، ")} />}
               <Row label={t("wizard.language")} value={(selected.language || "").toUpperCase()} />
               {selected.story_moral && <Row label={t("x.moral")} value={selected.story_moral} />}

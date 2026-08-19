@@ -31,9 +31,11 @@ export default function Wizard() {
   const [submitting, setSubmitting] = useState(false);
   const [cfg, setCfg] = useState({ base_price: 3400, extra_character_price: 250, coloring_price: 500, coloring_original_price: 2800 });
   const [coupon, setCoupon] = useState({ code: "", discount: 0, checked: false });
+  const [pet, setPet] = useState({ preview: "", checking: false, msg: "", ok: false });
   const [form, setForm] = useState({
     characters: [emptyChar(true)],
     story_type: "encouragement", positive_behaviors: "", negative_behaviors: "", special_details: "",
+    favorite_things: "", pet_name: "", pet_type: "", pet_photo_path: "",
     language: "ar", language_level: "simple", art_style: "cartoon", add_coloring: false, story_setting: [],
     lives_with: "", mother_name: "", mother_age: "", father_name: "", father_age: "", mention_parents: true,
     siblings: [], friends: [], quantity: 1, coupon_code: "",
@@ -76,8 +78,20 @@ export default function Wizard() {
     }
   };
 
-  const applyCoupon = async () => {
-    if (!coupon.code.trim()) return;
+  const handlePetPhoto = async (file) => {
+    if (!file) return;
+    setPet((p) => ({ ...p, preview: URL.createObjectURL(file), checking: true, msg: "" }));
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const { data } = await api.post("/orders/upload-photo", fd);
+      setPet((p) => ({ ...p, checking: false, ok: data.ok, msg: data.message }));
+      if (data.ok) set("pet_photo_path", data.path);
+    } catch {
+      setPet((p) => ({ ...p, checking: false, ok: false, msg: t("common.error") }));
+    }
+  };
+
+  const applyCoupon = async () => {    if (!coupon.code.trim()) return;
     const { data } = await api.post("/orders/validate-coupon", { code: coupon.code, subtotal });
     if (data.valid) { setCoupon((c) => ({ ...c, discount: data.discount, checked: true })); set("coupon_code", coupon.code); toast.success("✓"); }
     else { setCoupon((c) => ({ ...c, discount: 0, checked: true })); toast.error(t("common.error")); }
@@ -179,6 +193,28 @@ export default function Wizard() {
                     <div><label className={label}>{t("x.positive")}</label><input data-testid="positive-behaviors" className={inputCls} value={form.positive_behaviors} onChange={(e) => set("positive_behaviors", e.target.value)} /></div>
                     <div><label className={label}>{t("x.negative")}</label><input data-testid="negative-behaviors" className={inputCls} value={form.negative_behaviors} onChange={(e) => set("negative_behaviors", e.target.value)} /></div>
                     <div><label className={label}>{t("x.special")}</label><input data-testid="special-details" className={inputCls} value={form.special_details} onChange={(e) => set("special_details", e.target.value)} /></div>
+                    <div>
+                      <label className={label}>{t("x.favThings")}</label>
+                      <input data-testid="favorite-things" className={inputCls} value={form.favorite_things} onChange={(e) => set("favorite_things", e.target.value)} />
+                      <p className="text-xs text-ink/50 mt-1.5 leading-relaxed">{t("x.favThingsHint")}</p>
+                    </div>
+                    <div className="rounded-2xl border border-sage/40 bg-sage/5 p-4">
+                      <label className="block text-sm font-bold text-navy mb-3">🐾 {t("x.petSection")}</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><label className={label}>{t("x.petName")}</label><input data-testid="pet-name" className={inputCls} value={form.pet_name} onChange={(e) => set("pet_name", e.target.value)} /></div>
+                        <div><label className={label}>{t("x.petType")}</label><input data-testid="pet-type" className={inputCls} value={form.pet_type} onChange={(e) => set("pet_type", e.target.value)} /></div>
+                      </div>
+                      <div className="mt-3">
+                        <label className={label}>{t("x.petPhoto")} <span className="text-ink/40 font-normal">({t("x.optional")})</span></label>
+                        <label data-testid="pet-photo-dropzone" className="w-full cursor-pointer border-2 border-dashed border-sage/50 rounded-2xl p-4 bg-white hover:bg-sage/10 transition-colors flex flex-col items-center gap-2">
+                          <input type="file" accept="image/*" hidden onChange={(e) => handlePetPhoto(e.target.files[0])} data-testid="pet-photo-input" />
+                          {pet.preview ? <img src={pet.preview} alt="" className="w-24 h-24 object-cover rounded-xl shadow" /> : <UploadSimple size={30} weight="duotone" className="text-sage" />}
+                          <span className="text-ink/60 text-xs">{t("x.petPhotoHint")}</span>
+                        </label>
+                        {pet.checking && <p className="mt-2 flex items-center gap-2 text-ink/60 text-sm"><SpinnerGap className="animate-spin" /> {t("wizard.photoChecking")}</p>}
+                        {!pet.checking && pet.msg && <p data-testid="pet-photo-msg" className={`mt-2 flex items-center gap-2 text-sm font-medium ${pet.ok ? "text-sage" : "text-destructive"}`}>{pet.ok && <CheckCircle weight="fill" />} {pet.msg}</p>}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

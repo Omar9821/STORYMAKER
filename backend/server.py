@@ -108,6 +108,10 @@ class OrderCreate(BaseModel):
     positive_behaviors: str = ""
     negative_behaviors: str = ""
     special_details: str = ""
+    favorite_things: str = ""
+    pet_name: str = ""
+    pet_type: str = ""
+    pet_photo_path: str = ""
     language: str
     language_level: str = "simple"
     art_style: str = "cartoon"  # cartoon | watercolor | 3d
@@ -202,6 +206,13 @@ def build_story_context(o: OrderCreate) -> str:
         parts.append(f"gently and indirectly discourage: {o.negative_behaviors}")
     if o.special_details:
         parts.append(f"special details to include: {o.special_details}")
+    if o.favorite_things:
+        parts.append(f"things the child loves that MUST be woven into the plot as meaningful story "
+                     f"elements (not passing mentions), used to serve the educational goal: {o.favorite_things}")
+    if o.pet_name or o.pet_type:
+        pet = " ".join(x for x in [o.pet_name, f"({o.pet_type})" if o.pet_type else ""] if x).strip()
+        parts.append(f"the child has a pet named/of type '{pet}' — include it as a recurring companion "
+                     f"character that helps advance the story's behavioural lesson")
     if o.story_setting:
         parts.append(f"story takes place in: {', '.join(o.story_setting)}")
     if o.lives_with:
@@ -532,6 +543,8 @@ async def create_order(body: OrderCreate):
         "positive_behaviors": body.positive_behaviors,
         "negative_behaviors": body.negative_behaviors,
         "special_details": body.special_details,
+        "favorite_things": body.favorite_things,
+        "pet_name": body.pet_name, "pet_type": body.pet_type, "pet_photo_path": body.pet_photo_path,
         "language": body.language,
         "story_level": body.language_level,
         "art_style": body.art_style,
