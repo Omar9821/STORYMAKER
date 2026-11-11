@@ -24,7 +24,7 @@ def create_access_token(user_id: str, email: str) -> str:
         "sub": user_id,
         "email": email,
         "role": "admin",
-        "exp": datetime.now(timezone.utc) + timedelta(days=7),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=int(os.environ.get("ADMIN_TOKEN_HOURS", "12"))),
         "type": "access",
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -55,7 +55,13 @@ async def require_admin(request: Request) -> dict:
 
 async def seed_admin(db):
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@hikayati.dz").lower()
-    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if not admin_password:
+        # No built-in default any more (review item C1): refuse to start rather than run with a known password.
+        raise RuntimeError("ADMIN_PASSWORD is not set. Define a strong password in the environment.")
+    if len(admin_password) < 12:
+        import logging
+        logging.getLogger(__name__).warning("ADMIN_PASSWORD is shorter than 12 characters — please use a longer one.")
     existing = await db.admins.find_one({"email": admin_email})
     if existing is None:
         await db.admins.insert_one({

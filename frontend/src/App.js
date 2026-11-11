@@ -8,6 +8,7 @@ import MockPay from "./pages/MockPay";
 import Track from "./pages/Track";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import Legal from "./pages/Legal";
 import "./i18n";
 
 function App() {
@@ -22,6 +23,8 @@ function App() {
           <Route path="/pay/:orderId" element={<Pay />} />
           <Route path="/track" element={<Track />} />
           <Route path="/track/:orderId" element={<Track />} />
+          <Route path="/privacy" element={<Legal kind="privacy" />} />
+          <Route path="/terms" element={<Legal kind="terms" />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </Routes>

@@ -14,10 +14,17 @@ export default function Pay() {
   const [order, setOrder] = useState(null);
   const [method, setMethod] = useState("online");
   const [loading, setLoading] = useState(false);
+  const [online, setOnline] = useState(true);
 
   useEffect(() => {
     api.get(`/orders/${orderId}`).then(({ data }) => setOrder(data)).catch(() => toast.error(t("track.notFound")));
   }, [orderId, t]);
+
+  useEffect(() => {
+    api.get("/config").then(({ data }) => {
+      if (data.payment_online === false) { setOnline(false); setMethod("cod"); }
+    }).catch(() => {});
+  }, []);
 
   const pay = async () => {
     setLoading(true);
@@ -48,7 +55,7 @@ export default function Pay() {
           </div>
 
           <div className="grid gap-3">
-            <Option active={method === "online"} onClick={() => setMethod("online")} icon={CreditCard} title={t("pay.online")} desc={t("pay.onlineD")} testid="pay-online" />
+            {online && <Option active={method === "online"} onClick={() => setMethod("online")} icon={CreditCard} title={t("pay.online")} desc={t("pay.onlineD")} testid="pay-online" />}
             <Option active={method === "cod"} onClick={() => setMethod("cod")} icon={Money} title={t("pay.cod")} desc={t("pay.codD")} testid="pay-cod" />
           </div>
 

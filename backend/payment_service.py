@@ -9,12 +9,17 @@ CHARGILY_BASE_URL = os.environ.get("CHARGILY_BASE_URL", "https://pay.chargily.ne
 BACKEND_PUBLIC_URL = os.environ.get("BACKEND_PUBLIC_URL", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 
-MOCK_MODE = not bool(CHARGILY_SECRET_KEY)
+# Mock checkout is ONLY for demos/tests: it must be switched on explicitly (PAYMENT_MOCK=true).
+# Without a Chargily key and without PAYMENT_MOCK, online payment is simply unavailable (cash on delivery still works).
+MOCK_MODE = os.environ.get("PAYMENT_MOCK", "").lower() in ("1", "true", "yes")
+ONLINE_ENABLED = bool(CHARGILY_SECRET_KEY) or MOCK_MODE
 
 
 async def create_checkout(order_id: str, amount: int, payment_method: str = "edahabia") -> dict:
     """Returns {'checkout_url': str, 'checkout_id': str, 'mock': bool}."""
-    if MOCK_MODE:
+    if not ONLINE_ENABLED:
+        raise RuntimeError("Online payment is not configured")
+    if MOCK_MODE and not CHARGILY_SECRET_KEY:
         # MOCKED: no Chargily key configured. Simulate a hosted checkout page.
         return {
             "checkout_url": f"{FRONTEND_URL}/pay/mock?order_id={order_id}",

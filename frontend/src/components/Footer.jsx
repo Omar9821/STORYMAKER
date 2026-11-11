@@ -18,6 +18,8 @@ export const Footer = () => {
           <a href="/#how" className="hover:text-sand transition-colors">{t("nav.how")}</a>
           <a href="/#pricing" className="hover:text-sand transition-colors">{t("nav.pricing")}</a>
           <Link to="/track" className="hover:text-sand transition-colors">{t("nav.track")}</Link>
+          <Link to="/privacy" className="hover:text-sand transition-colors">{t("footer.privacy")}</Link>
+          <Link to="/terms" className="hover:text-sand transition-colors">{t("footer.terms")}</Link>
           <Link to="/admin/login" className="hover:text-sand transition-colors">{t("nav.admin")}</Link>
         </div>
         <div className="flex flex-col justify-end text-sm text-white/60">

@@ -39,7 +39,7 @@ BASE_URL = _load_backend_url()
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@hikayati.dz"
-ADMIN_PASSWORD = "Hikayati@2026"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 
 # ---------------- Fixtures ----------------

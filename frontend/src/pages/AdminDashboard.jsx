@@ -12,10 +12,11 @@ const STATUS_COLORS = {
   awaiting_payment: "bg-muted text-ink/60", paid: "bg-sand/40 text-navy", generating: "bg-terracotta/15 text-terracotta",
   review: "bg-sand/50 text-navy", approved: "bg-sage/25 text-sage", printing: "bg-navy/10 text-navy",
   shipped: "bg-sage/30 text-sage", delivered: "bg-sage text-white", failed: "bg-destructive/15 text-destructive",
+  cancelled: "bg-muted text-ink/50", refunded: "bg-muted text-ink/50",
 };
 
-const STATUS_LIST = ["awaiting_payment", "generating", "review", "approved", "printing", "shipped", "delivered", "failed"];
-const BULK_STATUS = ["approved", "printing", "shipped", "delivered"];
+const STATUS_LIST = ["awaiting_payment", "paid", "generating", "review", "approved", "printing", "shipped", "delivered", "failed", "cancelled", "refunded"];
+const BULK_STATUS = ["approved", "printing", "shipped", "delivered", "cancelled"];
 
 export default function AdminDashboard() {
   const { t } = useTranslation();
@@ -29,6 +30,12 @@ export default function AdminDashboard() {
   const [selected, setSelected] = useState(null);
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent", value: 10, max_uses: 0 });
   const [expandedVer, setExpandedVer] = useState(null);
+  const [shipFee, setShipFee] = useState("");
+  const [feesText, setFeesText] = useState("");
+  useEffect(() => {
+    setFeesText(Object.entries(settings.shipping_fees || {}).map(([k, v]) => `${k}:${v}`).join("\n"));
+  }, [JSON.stringify(settings.shipping_fees)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setShipFee(""); }, [selected?.id]);
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
@@ -76,7 +83,14 @@ export default function AdminDashboard() {
   const setStatus = (id, status) => act(() => api.post(`/admin/orders/${id}/status`, { status }), status);
   const logout = () => { localStorage.removeItem("hikayati_token"); navigate("/admin/login"); };
 
-  const saveSettings = () => act(() => api.put("/admin/settings", settings), t("x.save"));
+  const saveSettings = () => {
+    const fees = {};
+    feesText.split("\n").forEach((line) => {
+      const i = line.lastIndexOf(":");
+      if (i > 0) { const k = line.slice(0, i).trim(); const v = parseInt(line.slice(i + 1), 10); if (k && !Number.isNaN(v)) fees[k] = v; }
+    });
+    return act(() => api.put("/admin/settings", { ...settings, shipping_default_fee: Number(settings.shipping_default_fee) || 0, shipping_fees: fees }), t("x.save"));
+  };
   const addCoupon = () => act(() => api.post("/admin/coupons", newCoupon), t("x.addCoupon"));
   const delCoupon = (code) => act(() => api.delete(`/admin/coupons/${code}`), code);
   const replyTicket = (id, reply) => act(() => api.post(`/admin/tickets/${id}/reply`, { reply }), t("x.reply"));
@@ -177,6 +191,10 @@ export default function AdminDashboard() {
               <input type="number" data-testid="coloring-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-3" value={settings.coloring_price ?? 500} onChange={(e) => setSettings((s) => ({ ...s, coloring_price: Number(e.target.value) }))} />
               <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.coloringOrigPrice")}</label>
               <input type="number" data-testid="coloring-orig-price" className="w-full rounded-2xl border border-border px-4 py-3 mb-4" value={settings.coloring_original_price ?? 2800} onChange={(e) => setSettings((s) => ({ ...s, coloring_original_price: Number(e.target.value) }))} />
+              <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.shippingDefault")}</label>
+              <input type="number" data-testid="shipping-default" className="w-full rounded-2xl border border-border px-4 py-3 mb-3" value={settings.shipping_default_fee ?? 0} onChange={(e) => setSettings((s) => ({ ...s, shipping_default_fee: Number(e.target.value) }))} />
+              <label className="block text-sm font-semibold text-ink/70 mb-1">{t("x.shippingByWilaya")}</label>
+              <textarea rows={4} data-testid="shipping-by-wilaya" dir="ltr" placeholder={"Alger:600\nOran:700"} className="w-full rounded-2xl border border-border px-4 py-3 mb-4 font-mono text-sm" value={feesText} onChange={(e) => setFeesText(e.target.value)} />
               <button onClick={saveSettings} data-testid="save-settings" className="bg-terracotta text-white font-bold px-6 py-2.5 rounded-full">{t("x.save")}</button>
             </div>
             <div className="soft-card p-6">
@@ -229,6 +247,7 @@ export default function AdminDashboard() {
               <StatCard icon={Package} label={t("admin.totalOrders")} value={stats.total_orders} color="text-navy" />
               <StatCard icon={ChartBar} label={t("admin.revenue")} value={`${stats.revenue_dzd} DZD`} color="text-sage" />
               <StatCard icon={Coins} label={t("admin.aiCost")} value={`$${stats.total_ai_cost_usd}`} color="text-terracotta" />
+              <StatCard icon={Coins} label={t("x.pendingCod")} value={`${stats.pending_cod_dzd ?? 0} DZD`} color="text-navy" />
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="soft-card p-5"><h4 className="font-bold text-navy mb-3">{t("x.byType")}</h4>
@@ -252,14 +271,18 @@ export default function AdminDashboard() {
             <div className="soft-card p-4 mb-4 text-sm space-y-1">
               <Row label={t("admin.customer")} value={`${selected.customer_name} · ${selected.customer_phone}`} />
               <Row label={t("wizard.address")} value={`${selected.shipping_address}, ${selected.wilaya}`} />
-              <Row label={t("x.total")} value={`${selected.amount} DZD (${selected.extra_characters || 0}×${selected.extra_character_price || 0})`} />
+              <Row label={t("x.total")} value={`${selected.amount} DZD (${selected.extra_characters || 0}×${selected.extra_character_price || 0}) · ${t("x.shipping")}: ${selected.shipping_fee ?? 0} DZD`} />
               <Row label={t("track.status")} value={t(`track.st_${selected.status}`)} />
               <Row label={t("x.payment")} value={selected.payment_status === "cod_pending" ? t("x.payConfirmed") : selected.payment_status === "paid" ? t("x.payPaid") : t("x.payPending")} />
               <Row label={t("admin.aiCost")} value={`$${selected.ai_cost_usd || 0}`} />
               {selected.art_style && <Row label={t("x.artStyle")} value={t(`x.style${selected.art_style === "3d" ? "3d" : selected.art_style.charAt(0).toUpperCase() + selected.art_style.slice(1)}`)} />}
               <Row label={t("x.addColoring")} value={selected.add_coloring ? "✓" : "—"} />
               {selected.avg_similarity != null && <Row label={t("admin.similarity")} value={`${selected.avg_similarity} (MOCK)`} />}
-              <Row label={t("admin.refDeleted")} value={selected.reference_photo_deleted ? "✓" : "—"} />
+              <Row label={t("admin.refDeleted")} value={selected.reference_photo_deleted ? (selected.reference_files_purged ? "✓" : "⚠") : "—"} />
+              {selected.needs_content_review && <Row label={t("x.contentReview")} value="⚠" />}
+              {selected.illustration_modes?.length > 0 && <Row label={t("x.illModes")} value={`${selected.illustration_modes.filter((m) => m === "multi").length} multi · ${selected.illustration_modes.filter((m) => m === "pulid").length} single`} />}
+              {selected.multi_ref_error && <Row label={t("x.multiErr")} value={selected.multi_ref_error} />}
+              {selected.active_job && <Row label={t("x.activeJob")} value={selected.active_job.kind} />}
               {selected.versions?.length > 0 && <Row label={t("x.versions")} value={selected.versions.length} />}
             </div>
 
@@ -282,12 +305,24 @@ export default function AdminDashboard() {
               {selected.story_moral && <Row label={t("x.moral")} value={selected.story_moral} />}
             </div>
 
+            {selected.status === "awaiting_payment" && !selected.reference_photo_deleted && (
+              <div className="soft-card p-4 mb-4 border-2 border-sand" data-testid="phone-confirm-box">
+                <h3 className="font-bold text-navy mb-1">{t("x.phoneConfirm")}</h3>
+                <p className="text-xs text-ink/60 mb-3">{t("x.shippingHint")}</p>
+                <div className="flex items-center gap-2">
+                  <input type="number" min="0" data-testid="confirm-shipping-fee" className="w-32 rounded-2xl border border-border px-3 py-2" value={shipFee !== "" ? shipFee : (selected.shipping_fee ?? 0)} onChange={(e) => setShipFee(e.target.value)} />
+                  <span className="text-sm text-ink/60">DZD</span>
+                  <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/confirm-cod`, { shipping_fee: Number(shipFee !== "" ? shipFee : (selected.shipping_fee ?? 0)) || 0 }), t("x.confirmStart"))} icon={CheckCircle} label={t("x.confirmStart")} testid="act-confirm-cod" />
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 mb-4">
               <ActBtn onClick={() => setStatus(selected.id, "approved")} icon={CheckCircle} label={t("admin.approve")} testid="act-approve" />
-              {!selected.reference_photo_deleted && <>
+              {!selected.reference_photo_deleted && selected.status !== "awaiting_payment" && <>
                 <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate`), selected.pages?.length ? t("admin.regenerate") : t("x.generate"))} icon={ArrowClockwise} label={selected.pages?.length ? t("admin.regenerate") : t("x.generate")} testid="act-regenerate" />
                 <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate-text`), t("x.regenText"))} icon={TextT} label={t("x.regenText")} testid="act-regen-text" />
               </>}
+              {selected.pages?.length > 0 && <ActBtn onClick={() => act(() => api.post(`/admin/orders/${selected.id}/build-print`, {}), t("x.buildPrint"))} icon={Printer} label={t("x.buildPrint")} testid="act-build-print" />}
               <ActBtn onClick={() => setStatus(selected.id, "printing")} icon={Printer} label={t("admin.markPrinting")} testid="act-printing" />
               <ActBtn onClick={() => setStatus(selected.id, "shipped")} icon={Truck} label={t("admin.markShipped")} testid="act-shipped" />
               <ActBtn onClick={() => setStatus(selected.id, "delivered")} icon={CheckCircle} label={t("admin.markDelivered")} testid="act-delivered" />
@@ -306,6 +341,17 @@ export default function AdminDashboard() {
               </div>
             )}
 
+            {(selected.print_interior_path || selected.print_cover_path) && (
+              <div className="soft-card p-4 mb-4" data-testid="print-files">
+                <h3 className="font-bold text-navy mb-1 text-sm">{t("x.printFiles")}</h3>
+                {selected.print_info && <p className="text-xs text-ink/60 mb-2">{selected.print_info.trim} · {selected.print_info.page_count} p · {selected.print_info.target_dpi} dpi · {selected.print_info.bleed_mm} mm</p>}
+                <div className="flex flex-wrap gap-2">
+                  {selected.print_interior_path && <a href={fileUrl(selected.print_interior_path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-navy text-white font-bold px-5 py-2.5 rounded-full hover:brightness-110"><FilePdf weight="duotone" /> {t("x.printInterior")}</a>}
+                  {selected.print_cover_path && <a href={fileUrl(selected.print_cover_path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-sage text-white font-bold px-5 py-2.5 rounded-full hover:brightness-110"><FilePdf weight="duotone" /> {t("x.printCover")}</a>}
+                </div>
+              </div>
+            )}
+
             {selected.pages?.length > 0 && (
               <div>
                 <h3 className="font-bold text-navy mb-3">{t("admin.pages")}</h3>
@@ -314,7 +360,7 @@ export default function AdminDashboard() {
                   {selected.pages.map((p) => (
                     <div key={p.page_number} className="relative group">
                       <img src={fileUrl(p.image_path)} alt="" className="rounded-lg shadow aspect-[3/4] object-cover" />
-                      <span className={`absolute bottom-1 end-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${p.similarity_ok ? "bg-sage text-white" : "bg-destructive text-white"}`}>{p.similarity_score}</span>
+                      {p.image_stale && <span className="absolute bottom-1 end-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-destructive text-white">{t("x.stale")}</span>}
                       <button onClick={() => act(() => api.post(`/admin/orders/${selected.id}/regenerate-page/${p.page_number}`), `${t("x.regenPage")} ${p.page_number}`)} data-testid={`regen-page-${p.page_number}`}
                         className="absolute top-1 start-1 bg-white/90 rounded-full p-1 text-terracotta shadow hover:bg-white" title={t("x.regenPage")}><ArrowClockwise size={14} weight="bold" /></button>
                     </div>

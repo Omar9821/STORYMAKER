@@ -63,7 +63,12 @@ export default function Wizard() {
 
   const unit = cfg.base_price + Math.max(0, form.characters.length - 1) * cfg.extra_character_price + (form.add_coloring ? (cfg.coloring_price || 500) : 0);
   const subtotal = unit * Math.max(1, form.quantity);
-  const total = Math.max(0, subtotal - coupon.discount);
+  const shippingFee = (() => {
+    const fees = cfg.shipping_fees || {};
+    const k = Object.keys(fees).find((x) => x.trim().toLowerCase() === (form.wilaya || "").trim().toLowerCase());
+    return Number(k ? fees[k] : (cfg.shipping_default_fee || 0)) || 0;
+  })();
+  const total = Math.max(0, subtotal - coupon.discount) + shippingFee;
 
   const handlePhoto = async (i, file) => {
     if (!file) return;
@@ -307,12 +312,14 @@ export default function Wizard() {
                       <div className="flex justify-between"><span>{t("x.summary")}</span><span>{subtotal} DZD</span></div>
                       {form.add_coloring && <div className="flex justify-between text-ink/60"><span>🎨 {t("x.addonTitle")}</span><span>+{cfg.coloring_price} DZD</span></div>}
                       {coupon.discount > 0 && <div className="flex justify-between text-sage"><span>{t("x.discount")}</span><span>-{coupon.discount} DZD</span></div>}
+                      {shippingFee > 0 && <div className="flex justify-between text-ink/60"><span>{t("x.shipping")}</span><span>+{shippingFee} DZD</span></div>}
                       <div className="flex justify-between font-extrabold text-navy text-lg mt-1"><span>{t("x.total")}</span><span data-testid="wizard-total">{total} DZD</span></div>
                     </div>
                     <label className="flex items-start gap-3 bg-sage/10 rounded-2xl p-4 cursor-pointer">
                       <input type="checkbox" data-testid="consent" className="mt-1 w-5 h-5 accent-sage shrink-0" checked={form.consent} onChange={(e) => set("consent", e.target.checked)} />
                       <span className="text-sm text-ink/75 leading-relaxed">{t("wizard.consent")}</span>
                     </label>
+                    <p className="text-xs text-ink/60 mt-2 flex gap-3"><a href="/privacy" target="_blank" rel="noreferrer" className="underline">{t("footer.privacy")}</a><a href="/terms" target="_blank" rel="noreferrer" className="underline">{t("footer.terms")}</a></p>
                   </div>
                 </div>
               )}

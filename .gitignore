@@ -87,3 +87,7 @@ credentials.json
 *.key
 .credentials
 frontend/node_modules/.cache/default-development/0.pack
+
+# local storage backend + generated files
+backend/storage_data/
+*.pyc
