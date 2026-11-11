@@ -80,6 +80,10 @@ export default function Track() {
               )}
             </div>
 
+            {["cancelled", "refunded"].includes(order.status) && (
+              <p className="soft-card p-5 mb-6 text-ink/70 font-semibold" data-testid="track-cancelled">{t(`track.st_${order.status}`)}</p>
+            )}
+
             {order.status === "awaiting_payment" && (
               <div className="soft-card p-8 mb-6 flex flex-col items-center text-center bg-sage/5" data-testid="order-received-box">
                 <CheckCircle size={44} weight="fill" className="text-sage mb-3" />

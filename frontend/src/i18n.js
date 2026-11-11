@@ -37,7 +37,8 @@ const resources = {
         i1: "كتاب مطبوع بجودة عالية", i2: "نسخة PDF رقمية", i3: "شحن داخل الجزائر", i4: "مراجعة مجانية واحدة", i5: "🎁 كراس تلوين مجاني بنفس القصة",
         cta: "اطلب الآن",
       },
-      footer: { rights: "جميع الحقوق محفوظة", made: "صُنع بحبّ للأطفال في الجزائر" },
+      footer: {
+        privacy: "سياسة الخصوصية", terms: "الشروط والأحكام", rights: "جميع الحقوق محفوظة", made: "صُنع بحبّ للأطفال في الجزائر" },
       wizard: {
         title: "اصنع قصة طفلك",
         step: "خطوة", of: "من",
@@ -50,7 +51,7 @@ const resources = {
         photoUpload: "اسحب الصورة هنا أو اضغط للاختيار", photoChecking: "جارٍ فحص جودة الصورة...",
         language: "لغة القصة", langAr: "العربية", langEn: "الإنجليزية", langFr: "الفرنسية",
         consentTitle: "الموافقة والخصوصية",
-        consent: "أنا ولي أمر الطفل وأوافق على استخدام الصورة لتوليد القصة. أعلم أن الصورة مشفّرة وتُحذف تلقائيًا بعد اكتمال الطباعة.",
+        consent: "أنا ولي أمر الطفل وأوافق على استخدام الصورة والبيانات لإنتاج الكتاب. أعلم أن الصورة تُرسل لمزوّدي الذكاء الاصطناعي (لكتابة القصة ورسمها) خارج الجزائر، وتُحذف من خوادمنا بعد التسليم أو بطلبي، وقرأت سياسة الخصوصية والشروط.",
         delivery: "بيانات التوصيل", customerName: "اسمك الكامل", phone: "رقم الهاتف", email: "البريد (اختياري)",
         wilaya: "الولاية", address: "العنوان الكامل",
         next: "التالي", back: "السابق", submit: "متابعة للدفع",
@@ -72,6 +73,7 @@ const resources = {
         st_awaiting_payment: "تم استلام الطلب — سنتصل بك", st_paid: "تم تأكيد الطلب", st_generating: "قيد التوليد",
         st_review: "قيد المراجعة", st_approved: "تمت الموافقة", st_printing: "أُرسل للمطبعة",
         st_shipped: "تم الشحن", st_delivered: "تم التسليم", st_failed: "فشل — سنعيد المحاولة",
+        st_cancelled: "أُلغي الطلب", st_refunded: "تم استرجاع المبلغ",
       },
       admin: {
         login: "دخول الإدارة", email: "البريد الإلكتروني", password: "كلمة المرور", signin: "دخول",
@@ -84,6 +86,7 @@ const resources = {
       },
       common: { loading: "جارٍ التحميل...", error: "حدث خطأ", required: "حقل مطلوب", price: "3400 دج" },
       x: {
+        shipping: "الشحن", shippingFee: "رسوم الشحن (دج)", phoneConfirm: "تأكيد الطلب هاتفياً", confirmStart: "تأكيد وبدء التوليد", shippingHint: "الرسوم المقترحة حسب الولاية. عدّلها بعد الاتفاق مع الزبون، ويُحسب الإجمالي من جديد.", pendingCod: "دفع عند الاستلام قيد التحصيل", contentReview: "يحتاج مراجعة محتوى", illModes: "طريقة الرسم", multiErr: "تنبيه الصور المتعددة", activeJob: "مهمة قيد التنفيذ", buildPrint: "تجهيز ملفات الطباعة", printFiles: "ملفات الطباعة", printInterior: "داخل الكتاب (مع القص)", printCover: "الغلاف المفرود", stale: "نص جديد", shippingDefault: "رسوم الشحن الافتراضية (دج)", shippingByWilaya: "رسوم حسب الولاية (سطر لكل ولاية: الاسم:المبلغ)",
         characters: "الشخصيات", mainCharacter: "الشخصية الأساسية", addCharacter: "+ إضافة شخصية",
         extraCharCost: "كل شخصية إضافية: 250 دج", removeChar: "حذف", relation: "صلة القرابة",
         hairColor: "لون الشعر", hairType: "نوع الشعر", hairLength: "طول الشعر", optional: "اختياري",
@@ -151,7 +154,8 @@ const resources = {
         i1: "High-quality printed book", i2: "Digital PDF copy", i3: "Shipping across Algeria", i4: "One free revision", i5: "🎁 Free coloring book of the same story",
         cta: "Order now",
       },
-      footer: { rights: "All rights reserved", made: "Made with love for children in Algeria" },
+      footer: {
+        privacy: "Privacy Policy", terms: "Terms & Conditions", rights: "All rights reserved", made: "Made with love for children in Algeria" },
       wizard: {
         title: "Create your child's story", step: "Step", of: "of",
         childInfo: "Child details", childName: "Child's name", childAge: "Age", childGender: "Gender",
@@ -163,7 +167,7 @@ const resources = {
         photoUpload: "Drag a photo here or click to choose", photoChecking: "Checking photo quality...",
         language: "Story language", langAr: "Arabic", langEn: "English", langFr: "French",
         consentTitle: "Consent & privacy",
-        consent: "I am the child's guardian and consent to using the photo to generate the story. I understand it is encrypted and auto-deleted after printing.",
+        consent: "I am the child's guardian and consent to using the photo and data to produce the book. I understand the photo is sent to AI providers (to write and draw the story) outside Algeria and is deleted from our servers after delivery or on request, and I have read the Privacy Policy and Terms.",
         delivery: "Delivery details", customerName: "Your full name", phone: "Phone number", email: "Email (optional)",
         wilaya: "Wilaya", address: "Full address",
         next: "Next", back: "Back", submit: "Continue to payment", review: "Review order",
@@ -184,6 +188,7 @@ const resources = {
         st_awaiting_payment: "Order received — we'll call you", st_paid: "Order confirmed", st_generating: "Generating",
         st_review: "In review", st_approved: "Approved", st_printing: "Sent to printer",
         st_shipped: "Shipped", st_delivered: "Delivered", st_failed: "Failed — we'll retry",
+        st_cancelled: "Order cancelled", st_refunded: "Refunded",
       },
       admin: {
         login: "Admin login", email: "Email", password: "Password", signin: "Sign in",
@@ -196,6 +201,7 @@ const resources = {
       },
       common: { loading: "Loading...", error: "An error occurred", required: "Required field", price: "3400 DZD" },
       x: {
+        shipping: "Shipping", shippingFee: "Shipping fee (DZD)", phoneConfirm: "Confirm order by phone", confirmStart: "Confirm & start generation", shippingHint: "Suggested fee by wilaya. Adjust it after agreeing with the customer; the total is recomputed.", pendingCod: "Cash on delivery pending", contentReview: "Needs content review", illModes: "Illustration mode", multiErr: "Multi-reference warning", activeJob: "Job in progress", buildPrint: "Build print files", printFiles: "Print files", printInterior: "Interior (with bleed)", printCover: "Cover spread", stale: "New text", shippingDefault: "Default shipping fee (DZD)", shippingByWilaya: "Fee per wilaya (one per line: Name:Amount)",
         characters: "Characters", mainCharacter: "Main character", addCharacter: "+ Add character",
         extraCharCost: "Each extra character: 250 DZD", removeChar: "Remove", relation: "Relation",
         hairColor: "Hair colour", hairType: "Hair type", hairLength: "Hair length", optional: "optional",
@@ -263,7 +269,8 @@ const resources = {
         i1: "Livre imprimé de qualité", i2: "Copie PDF numérique", i3: "Livraison en Algérie", i4: "Une révision gratuite", i5: "🎁 Cahier de coloriage gratuit de la même histoire",
         cta: "Commander",
       },
-      footer: { rights: "Tous droits réservés", made: "Fait avec amour pour les enfants en Algérie" },
+      footer: {
+        privacy: "Politique de confidentialité", terms: "Conditions générales", rights: "Tous droits réservés", made: "Fait avec amour pour les enfants en Algérie" },
       wizard: {
         title: "Créer l'histoire de votre enfant", step: "Étape", of: "sur",
         childInfo: "Détails de l'enfant", childName: "Nom de l'enfant", childAge: "Âge", childGender: "Sexe",
@@ -275,7 +282,7 @@ const resources = {
         photoUpload: "Glissez une photo ici ou cliquez", photoChecking: "Vérification de la qualité...",
         language: "Langue de l'histoire", langAr: "Arabe", langEn: "Anglais", langFr: "Français",
         consentTitle: "Consentement & confidentialité",
-        consent: "Je suis le tuteur de l'enfant et je consens à utiliser la photo pour générer l'histoire. Je comprends qu'elle est chiffrée et supprimée après impression.",
+        consent: "Je suis le tuteur de l'enfant et j'accepte l'utilisation de la photo et des données pour produire le livre. Je comprends que la photo est envoyée à des prestataires d'IA (pour écrire et illustrer l'histoire) hors d'Algérie, puis supprimée de nos serveurs après la livraison ou sur demande, et j'ai lu la Politique de confidentialité et les Conditions.",
         delivery: "Détails de livraison", customerName: "Votre nom complet", phone: "Téléphone", email: "Email (optionnel)",
         wilaya: "Wilaya", address: "Adresse complète",
         next: "Suivant", back: "Retour", submit: "Continuer vers le paiement", review: "Vérifier la commande",
@@ -296,6 +303,7 @@ const resources = {
         st_awaiting_payment: "Commande reçue — nous vous appellerons", st_paid: "Commande confirmée", st_generating: "Génération",
         st_review: "En révision", st_approved: "Approuvé", st_printing: "Envoyé à l'imprimeur",
         st_shipped: "Expédié", st_delivered: "Livré", st_failed: "Échec — nouvelle tentative",
+        st_cancelled: "Commande annulée", st_refunded: "Remboursée",
       },
       admin: {
         login: "Connexion admin", email: "Email", password: "Mot de passe", signin: "Se connecter",
@@ -308,6 +316,7 @@ const resources = {
       },
       common: { loading: "Chargement...", error: "Une erreur s'est produite", required: "Champ requis", price: "3400 DZD" },
       x: {
+        shipping: "Livraison", shippingFee: "Frais de livraison (DZD)", phoneConfirm: "Confirmer la commande par téléphone", confirmStart: "Confirmer et lancer la génération", shippingHint: "Frais suggérés par wilaya. Ajustez-les après accord avec le client; le total est recalculé.", pendingCod: "Paiement à la livraison en attente", contentReview: "Contenu à vérifier", illModes: "Mode d'illustration", multiErr: "Alerte multi-références", activeJob: "Tâche en cours", buildPrint: "Préparer les fichiers d'impression", printFiles: "Fichiers d'impression", printInterior: "Intérieur (avec fond perdu)", printCover: "Couverture à plat", stale: "Nouveau texte", shippingDefault: "Frais de livraison par défaut (DZD)", shippingByWilaya: "Frais par wilaya (une par ligne : Nom:Montant)",
         characters: "Personnages", mainCharacter: "Personnage principal", addCharacter: "+ Ajouter un personnage",
         extraCharCost: "Chaque personnage supplémentaire : 250 DZD", removeChar: "Supprimer", relation: "Relation",
         hairColor: "Couleur des cheveux", hairType: "Type de cheveux", hairLength: "Longueur des cheveux", optional: "optionnel",

@@ -17,6 +17,23 @@ QUEUE_ORIGIN = "https://queue.fal.run"
 PULID_ENDPOINT = "fal-ai/flux-pulid"
 
 
+def _image_size():
+    """Default portrait_4_3 (768x1024). Set FAL_IMAGE_W / FAL_IMAGE_H (e.g. 1152 x 1536) for sharper
+    prints if your fal plan allows it (review item L7). Multiples of 8 only."""
+    try:
+        w, h = int(os.environ.get("FAL_IMAGE_W", "0")), int(os.environ.get("FAL_IMAGE_H", "0"))
+    except ValueError:
+        return "portrait_4_3"
+    if w >= 512 and h >= 512 and w % 8 == 0 and h % 8 == 0:
+        return {"width": w, "height": h}
+    return "portrait_4_3"
+
+
+IMAGE_SIZE = _image_size()
+MULTI_REF_ENDPOINT = os.environ.get("MULTI_REF_ENDPOINT", "fal-ai/nano-banana/edit")
+UPSCALE_ENDPOINT = os.environ.get("UPSCALE_ENDPOINT", "").strip()  # e.g. an ESRGAN / clarity upscaler on fal
+
+
 class FalError(Exception):
     pass
 
@@ -55,7 +72,36 @@ def _get_retry(url, timeout, attempts=10):
     raise FalError(f"GET failed after retries: {last}")
 
 
+FAL_KEY = os.environ.get("FAL_KEY", "").strip()   # set it to call fal.ai directly instead of the Emergent proxy (L12)
+
+
+def _run_direct(endpoint_id: str, payload: dict, timeout_seconds: int) -> dict:
+    """fal.ai queue REST API with your own key (https://docs.fal.ai/model-endpoints/queue)."""
+    hdr = {"Authorization": f"Key {FAL_KEY}", "Content-Type": "application/json"}
+    sub = requests.post(f"{QUEUE_ORIGIN}/{endpoint_id}", headers=hdr, json=payload, timeout=60)
+    sub.raise_for_status()
+    j = sub.json()
+    status_url, response_url = j["status_url"], j["response_url"]
+    if not (status_url.startswith(QUEUE_ORIGIN) and response_url.startswith(QUEUE_ORIGIN)):
+        raise FalError("Untrusted queue URL")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        st = requests.get(status_url, headers=hdr, timeout=30)
+        st.raise_for_status()
+        status = (st.json().get("status") or "").upper()
+        if status == "COMPLETED":
+            res = requests.get(response_url, headers=hdr, timeout=60)
+            res.raise_for_status()
+            return res.json()
+        if status in {"FAILED", "ERROR", "CANCELLED"}:
+            raise FalError(f"fal generation {status}")
+        time.sleep(2.5)
+    raise FalError("Timed out waiting for generation")
+
+
 def run_media_generation(endpoint_id: str, payload: dict, timeout_seconds: int = 480) -> dict:
+    if FAL_KEY:
+        return _run_direct(endpoint_id, payload, timeout_seconds)
     submit = None
     delay = 3
     for _ in range(5):
@@ -144,7 +190,7 @@ def generate_illustration_pulid(reference_image_url: str, scene: str, seed: int,
         "reference_image_url": reference_image_url,
         "prompt": prompt,
         "id_weight": id_weight,
-        "image_size": "portrait_4_3",
+        "image_size": IMAGE_SIZE,
         "num_inference_steps": 20,
         "guidance_scale": 4,
         "seed": seed,
@@ -172,3 +218,35 @@ def generate_illustration_pulid(reference_image_url: str, scene: str, seed: int,
             logger.warning(f"fal illustration attempt {attempt + 1}/3 network error: {e}")
         time.sleep(5 * (attempt + 1))
     raise FalError(f"Illustration failed after 3 attempts: {last_err}")
+
+
+def _download_first_image(result: dict) -> bytes:
+    images = result.get("images") or ([result["image"]] if result.get("image") else [])
+    if not images or not images[0].get("url"):
+        raise FalError("No image returned")
+    r = requests.get(images[0]["url"], timeout=90)
+    r.raise_for_status()
+    return r.content
+
+
+def generate_multi_reference(image_urls: list, prompt: str, seed: int, endpoint: str = None) -> bytes:
+    """Several identity photos in ONE picture (child + siblings / parents / pet) — review item H16.
+
+    Uses an image-edit model that accepts a list of reference images (default fal-ai/nano-banana/edit;
+    override with MULTI_REF_ENDPOINT, e.g. fal-ai/flux-pro/kontext/max/multi). Raises FalError on failure so the
+    caller can fall back to the single-identity PuLID path.
+    """
+    endpoint = endpoint or MULTI_REF_ENDPOINT
+    payload = {"prompt": prompt, "image_urls": image_urls, "num_images": 1, "output_format": "png"}
+    if "kontext" in endpoint:
+        payload.update({"aspect_ratio": "3:4", "seed": seed})
+    result = run_media_generation(endpoint, payload, timeout_seconds=300)
+    return _download_first_image(result)
+
+
+def upscale_image(image_url: str, scale: int = 2) -> bytes:
+    """Optional AI upscaler (UPSCALE_ENDPOINT). Raises FalError if not configured."""
+    if not UPSCALE_ENDPOINT:
+        raise FalError("UPSCALE_ENDPOINT not configured")
+    result = run_media_generation(UPSCALE_ENDPOINT, {"image_url": image_url, "scale": scale}, timeout_seconds=300)
+    return _download_first_image(result)

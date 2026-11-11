@@ -21,7 +21,7 @@ from PIL import Image
 
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@hikayati.dz")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Hikayati@2026")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", os.environ.get("ADMIN_PASSWORD", ""))
 
 
 def _png_bytes(w=600, h=600, color=(220, 180, 140)):

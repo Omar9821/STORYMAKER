@@ -50,17 +50,23 @@ def _shape(text: str, rtl: bool) -> str:
     return get_display(_fix_isolated(arabic_reshaper.reshape(text))) if rtl else text
 
 
-def _clean_text(text: str) -> str:
-    """Deterministic Arabic text hygiene applied to EVERY story (radical, LLM-independent):
-    - strip quotation marks (ASCII/smart/back-ticks) that float wrongly in RTL reshaping,
-    - collapse repeated whitespace,
-    - remove any space BEFORE punctuation and guarantee one space AFTER it,
-    so dialogue and sentences never render with detached/overlapping symbols."""
+def _clean_text(text: str, rtl: bool = True) -> str:
+    """Deterministic text hygiene applied to EVERY story (LLM-independent).
+
+    Arabic (rtl=True): strip all quote glyphs (they float wrongly in RTL reshaping), fix spacing around
+    Arabic punctuation.  Latin languages (rtl=False): only strip double quotes / guillemets / back-ticks and
+    collapse whitespace — apostrophes inside words (l'histoire, d'un, it's) are KEPT (review item H15).
+    """
     t = (text or "").strip()
-    t = re.sub(r"[\"'“”‘’`´«»]", "", t)          # drop stray quote glyphs
-    t = re.sub(r"\s+", " ", t)                     # normalise whitespace
-    t = re.sub(r"\s+([،.!؟:,;])", r"\1", t)        # no space before punctuation
-    t = re.sub(r"([،.!؟:,;])(?=\S)", r"\1 ", t)    # one space after punctuation
+    if rtl:
+        t = re.sub(r"[\"'“”‘’`´«»]", "", t)
+        t = re.sub(r"\s+", " ", t)
+        t = re.sub(r"\s+([،.!؟:,;])", r"\1", t)
+        t = re.sub(r"([،.!؟:,;])(?=\S)", r"\1 ", t)
+    else:
+        t = re.sub(r"[\"“”«»`´]", "", t)
+        t = t.replace("’", "'").replace("‘", "'")
+        t = re.sub(r"\s+", " ", t)
     return t.strip()
 
 
@@ -87,7 +93,7 @@ def _wrap_shaped(text, font, size, max_width, rtl):
     multi-line paragraph reverses the entire string, so splitting it afterwards puts the
     END of the text on the first line. Wrapping the logical text first and shaping each
     line keeps sentences in the correct chronological order (line 1 = first words)."""
-    words = _clean_text(text).split()
+    words = _clean_text(text, rtl).split()
     lines, cur = [], ""
     for w in words:
         trial = (cur + " " + w).strip()
@@ -118,10 +124,33 @@ def _dominant_color(image_bytes):
         return (0.95, 0.78, 0.55)
 
 
+DESIGN_W = A4[0]
+
+
+class _ScaledCanvas(canvas.Canvas):
+    """A canvas whose pages are drawn in A4-design units and uniformly scaled to any page size
+    (A5, square, with bleed...). Layout code therefore stays untouched."""
+
+    def __init__(self, *args, design_scale: float = 1.0, **kw):
+        self._design_scale = design_scale
+        super().__init__(*args, **kw)
+
+    def _make_preamble(self):
+        super()._make_preamble()
+        if self._design_scale != 1.0:
+            self._preamble += " %.6f 0 0 %.6f 0 0 cm" % (self._design_scale, self._design_scale)
+
+
 class BookCanvas:
-    def __init__(self, buf):
-        self.W, self.H = A4
-        self.c = canvas.Canvas(buf, pagesize=A4)
+    def __init__(self, buf, pagesize=A4, bleed: float = 0.0):
+        self.pagesize = pagesize
+        self.s = pagesize[0] / DESIGN_W
+        self.W, self.H = DESIGN_W, pagesize[1] / self.s
+        self.bleed = bleed
+        self.c = _ScaledCanvas(buf, pagesize=pagesize, design_scale=self.s)
+        if bleed:
+            self.c.setTrimBox((bleed, bleed, pagesize[0] - bleed, pagesize[1] - bleed))
+            self.c.setBleedBox((0, 0, pagesize[0], pagesize[1]))
 
     # ---- primitives ----
     def bg_gradient(self, top_c, bottom_c):
@@ -155,8 +184,9 @@ class BookCanvas:
         self.image_cover(img_bytes, cx - r, cy - r, 2 * r, 2 * r)
         c.restoreState()
 
-    def logo_badge(self, rtl, accent):
+    def logo_badge(self, rtl, accent, right=None):
         c, W, H = self.c, self.W, self.H
+        W = right if right is not None else W
         label = _shape("حكايتي" if rtl else "Hikayati", rtl)
         c.setFont(DISPLAY, 15)
         tw = pdfmetrics.stringWidth(label, DISPLAY, 15)
@@ -194,12 +224,45 @@ class BookCanvas:
             y -= line_h
 
 
+def _draw_cover(bc, x0, pw, title, cover_image, rtl, child_name):
+    """Front cover drawn inside the panel [x0, x0+pw] (design units). Used by the book and by the
+    print cover spread."""
+    c, H = bc.c, bc.H
+
+    def shp(t):
+        return _shape(t, rtl)
+
+    dom = _dominant_color(cover_image)
+    bc.star(x0 + 60, H - 110, 16, _mix(dom, 0.15))
+    bc.star(x0 + pw - 70, H - 160, 12, _mix(dom, 0.15))
+    bc.star(x0 + 48, 120, 11, _mix(dom, 0.2))
+    r = pw * 0.30
+    cx, cy = x0 + pw / 2, H * 0.60
+    c.setFillColor(Color(*_mix(dom, 0.85)))
+    c.circle(cx, cy, r + 16, fill=1, stroke=0)
+    c.setStrokeColor(Color(1, 1, 1)); c.setLineWidth(8)
+    c.circle(cx, cy, r + 4, fill=0, stroke=1)
+    bc.circle_image(cover_image, cx, cy, r)
+    bc.logo_badge(rtl, _mix(dom, 0.05), right=x0 + pw)
+    dark = (0.16, 0.17, 0.28)
+    title_lines = _wrap_shaped(title, DISPLAY, 46, pw - 90, rtl)
+    c.setFillColor(Color(*dark)); c.setFont(DISPLAY, 46)
+    ty = cy - r - 70
+    for ln in title_lines:
+        c.drawCentredString(cx, ty, ln)
+        ty -= 52
+    sub = shp(f"قصة مخصّصة لـ {child_name}" if rtl else f"A special story for {child_name}")
+    c.setFont(BODY, 16); c.setFillColor(Color(*_mix(dark, 0.35)))
+    c.drawCentredString(cx, ty - 4, sub)
+
+
 def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
-                   language: str, child_name: str) -> bytes:
+                   language: str, child_name: str, pagesize=A4, bleed: float = 0.0, pad_to: int = 0) -> bytes:
+    """Story book PDF. Default = A4 screen version. For print pass pagesize=(trim+2*bleed) and bleed (pt)."""
     _register_fonts()
     rtl = language == "ar"
     buf = io.BytesIO()
-    bc = BookCanvas(buf)
+    bc = BookCanvas(buf, pagesize, bleed)
     c, W, H = bc.c, bc.W, bc.H
 
     def shp(t):
@@ -208,32 +271,7 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
     # ---------------- Cover ----------------
     dom = _dominant_color(cover_image)
     bc.bg_gradient(_mix(dom, 0.35), _mix(dom, 0.70))
-    # decorative stars
-    bc.star(60, H - 110, 16, _mix(dom, 0.15))
-    bc.star(W - 70, H - 160, 12, _mix(dom, 0.15))
-    bc.star(48, 120, 11, _mix(dom, 0.2))
-    # child inside a circle with a soft ring
-    r = W * 0.30
-    cx, cy = W / 2, H * 0.60
-    c.setFillColor(Color(*_mix(dom, 0.85)))
-    c.circle(cx, cy, r + 16, fill=1, stroke=0)
-    c.setStrokeColor(Color(1, 1, 1)); c.setLineWidth(8)
-    c.circle(cx, cy, r + 4, fill=0, stroke=1)
-    bc.circle_image(cover_image, cx, cy, r)
-    # logo badge
-    bc.logo_badge(rtl, _mix(dom, 0.05))
-    # title (big playful display)
-    dark = (0.16, 0.17, 0.28)
-    title_lines = _wrap_shaped(title, DISPLAY, 46, W - 90, rtl)
-    c.setFillColor(Color(*dark)); c.setFont(DISPLAY, 46)
-    ty = cy - r - 70
-    for ln in title_lines:
-        c.drawCentredString(W / 2, ty, ln)
-        ty -= 52
-    # subtitle
-    sub = shp(f"قصة مخصّصة لـ {child_name}" if rtl else f"A special story for {child_name}")
-    c.setFont(BODY, 16); c.setFillColor(Color(*_mix(dark, 0.35)))
-    c.drawCentredString(W / 2, ty - 4, sub)
+    _draw_cover(bc, 0, W, title, cover_image, rtl, child_name)
     c.showPage()
 
     # ---------------- Story pages (integrated cards) ----------------
@@ -293,33 +331,64 @@ def build_book_pdf(title: str, moral: str, pages: list, cover_image: bytes,
     bc.logo_badge(rtl, _mix(end_dom, 0.0))
     c.showPage()
 
+    # pad with blank pages so the page count is a multiple of `pad_to` (printers bind in 4-page signatures)
+    if pad_to:
+        for _ in range((-(len(pages) + 2)) % pad_to):
+            c.setFillColorRGB(1, 1, 1); c.rect(0, 0, W, H, fill=1, stroke=0)
+            c.showPage()
+
     c.save()
     buf.seek(0)
     return buf.read()
 
 
 def make_line_art(image_bytes: bytes) -> bytes:
-    """Colour illustration -> clean coloring-book outline with COMPLETE, BOLD, uniform lines
-    that keep both the full characters and the key background elements (adaptive local
-    thresholding + morphological closing, instead of a sketch filter that drops parts)."""
-    img = Image.open(io.BytesIO(image_bytes)).convert("L")
-    img = ImageOps.autocontrast(img)
-    # denoise while preserving edges
-    base = img.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.GaussianBlur(0.6))
-    g = np.asarray(base, dtype=np.float32)
-    # local mean (large blur) -> adaptive threshold keeps outlines of ALL elements (character
-    # body, clothes, window, plants...) as closed dark lines, not just high-contrast edges.
-    local_mean = np.asarray(base.filter(ImageFilter.GaussianBlur(9)), dtype=np.float32)
-    C = 9.0
-    dark = g < (local_mean - C)
-    out = np.where(dark, 0, 255).astype("uint8")
-    res = Image.fromarray(out, "L")
-    # morphological CLOSE (dilate then erode) to seal small gaps -> complete closed contours
-    res = res.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
-    # despeckle stray dots, then set a BOLD uniform line weight
-    res = res.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.MinFilter(3))
+    """Colour illustration -> clean coloring-book outlines (review item L8).
+
+    Old method: adaptive threshold on luminance -> thick blobs (hair, shoes, shadows) and speckle in textured
+    areas (grass, trees). New method:
+      1. work at 2x resolution (crisp lines when printed);
+      2. edge strength = max Sobel magnitude over R,G,B after a light blur (so colour boundaries count, flat
+         shading and soft gradients do not);
+      3. hysteresis threshold: weak edges are kept only when connected to strong ones;
+      4. drop tiny disconnected fragments (texture noise);
+      5. one uniform stroke width, black on white (mode L).
+    """
+    from scipy import ndimage as ndi
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    w, h = img.size
+    img = img.resize((w * 2, h * 2), Image.LANCZOS)
+    arr = np.asarray(img, dtype=np.float32)
+    arr = np.stack([ndi.gaussian_filter(arr[..., k], 1.4) for k in range(3)], axis=-1)
+    mag = np.zeros(arr.shape[:2], dtype=np.float32)
+    for k in range(3):
+        gx, gy = ndi.sobel(arr[..., k], axis=1), ndi.sobel(arr[..., k], axis=0)
+        mag = np.maximum(mag, np.hypot(gx, gy))
+    mag /= (mag.max() + 1e-6)
+    hi, lo = np.percentile(mag, 94), np.percentile(mag, 86)
+    strong, weak = mag >= hi, mag >= lo
+    lab, n = ndi.label(weak, structure=np.ones((3, 3)))
+    keep = np.unique(lab[strong])
+    keep = keep[keep > 0]
+    edges = np.isin(lab, keep)
+    # texture suppression: short fragments sitting inside DENSE edge areas (grass, leaves, fur) are noise;
+    # short fragments in sparse areas (eyes, mouth, buttons) are real details and are kept.
+    lab2, n2 = ndi.label(edges, structure=np.ones((3, 3)))
+    if n2:
+        sizes = np.bincount(lab2.ravel(), minlength=n2 + 1)
+        density = ndi.uniform_filter(edges.astype(np.float32), size=int(edges.shape[1] * 0.04) | 1)
+        dense = density > 0.10
+        dense_frac = ndi.mean(dense, labels=lab2, index=np.arange(n2 + 1))
+        area = edges.size
+        tiny = sizes < max(40, int(area * 0.00005))
+        texture = (sizes < int(area * 0.0012)) & (dense_frac > 0.35)
+        drop = tiny | texture
+        drop[0] = False
+        edges = edges & ~drop[lab2]
+    edges = ndi.binary_dilation(edges, iterations=2)  # uniform, print-visible stroke (~0.5 mm at A5)
+    out = np.where(edges, 0, 255).astype("uint8")
     buf = io.BytesIO()
-    res.convert("RGB").save(buf, "PNG")
+    Image.fromarray(out, "L").save(buf, "PNG", optimize=True)
     return buf.getvalue()
 
 
@@ -374,6 +443,67 @@ def build_coloring_pdf(title: str, line_pages: list, language: str) -> bytes:
         c.drawCentredString(W / 2, 29, str(i + 1))
         c.showPage()
 
+    c.save()
+    buf.seek(0)
+    return buf.read()
+
+
+# ====================================================================== print production (L7)
+MM = 72.0 / 25.4
+TRIM_SIZES_MM = {"A5": (148, 210), "A4": (210, 297), "square21": (210, 210), "square15": (152, 152)}
+
+
+def trim_points(name: str):
+    w, h = TRIM_SIZES_MM.get(name, TRIM_SIZES_MM["A5"])
+    return w * MM, h * MM
+
+
+def build_cover_spread_pdf(title: str, cover_image: bytes, language: str, child_name: str,
+                           trim: str = "A5", bleed_mm: float = 3.0, spine_mm: float = 3.0) -> bytes:
+    """Flat cover for the printer: back cover | spine | front cover, with bleed around the whole spread."""
+    _register_fonts()
+    rtl = language == "ar"
+    tw, th = trim_points(trim)
+    bleed, spine = bleed_mm * MM, spine_mm * MM
+    total_w, total_h = 2 * tw + spine + 2 * bleed, th + 2 * bleed
+    s = tw / DESIGN_W
+    buf = io.BytesIO()
+    cv = _ScaledCanvas(buf, pagesize=(total_w, total_h), design_scale=s)
+    cv.setTrimBox((bleed, bleed, total_w - bleed, total_h - bleed))
+    cv.setBleedBox((0, 0, total_w, total_h))
+
+    class _B:  # duck-typed BookCanvas for the shared helpers
+        pass
+
+    bc = BookCanvas.__new__(BookCanvas)
+    bc.c, bc.s, bc.W, bc.H, bc.pagesize, bc.bleed = cv, s, total_w / s, total_h / s, (total_w, total_h), bleed
+    dom = _dominant_color(cover_image)
+    bc.bg_gradient(_mix(dom, 0.35), _mix(dom, 0.70))
+    # panels in design units; with RTL books the front cover is on the RIGHT, otherwise on the right too
+    # (printers expect front = right half of the spread for left-bound books; for Arabic the binding side
+    # flips, so the order is mirrored).
+    panel = tw / s
+    spine_d, bleed_d = spine / s, bleed / s
+    left_x0 = bleed_d
+    right_x0 = bleed_d + panel + spine_d
+    front_x0, back_x0 = (left_x0, right_x0) if rtl else (right_x0, left_x0)
+    _draw_cover(bc, front_x0, panel, title, cover_image, rtl, child_name)
+    # back cover: tagline + logo
+    c = cv
+    dark = (0.16, 0.17, 0.28)
+    tag = _shape("قصة صُنعت خصيصاً لطفلك" if rtl else "A story made just for your child", rtl)
+    c.setFont(DISPLAY, 24); c.setFillColor(Color(*dark))
+    c.drawCentredString(back_x0 + panel / 2, bc.H * 0.55, tag)
+    bc.logo_badge(rtl, _mix(dom, 0.05), right=back_x0 + panel)
+    # spine title (only if wide enough)
+    if spine_mm >= 6:
+        c.saveState()
+        c.translate(bleed_d + panel + spine_d / 2, bc.H / 2)
+        c.rotate(90 if not rtl else -90)
+        c.setFont(DISPLAY, 14); c.setFillColor(Color(*dark))
+        c.drawCentredString(0, -5, _shape(title, rtl))
+        c.restoreState()
+    c.showPage()
     c.save()
     buf.seek(0)
     return buf.read()

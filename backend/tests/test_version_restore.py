@@ -24,7 +24,7 @@ import requests
 
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@hikayati.dz")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Hikayati@2026")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", os.environ.get("ADMIN_PASSWORD", ""))
 
 FAKE_ID = "00000000-0000-0000-0000-000000000000"
 
