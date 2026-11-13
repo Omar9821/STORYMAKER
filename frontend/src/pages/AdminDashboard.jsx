@@ -163,7 +163,7 @@ export default function AdminDashboard() {
                       <td className="p-4 font-semibold text-navy">{o.child_name}<span className="block text-xs text-ink/40">{o.language?.toUpperCase()}</span></td>
                       <td className="p-4 text-ink/70 text-sm">{o.customer_name}<span className="block text-xs text-ink/40">{o.wilaya}</span></td>
                       <td className="p-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${STATUS_COLORS[o.status] || "bg-muted"}`}>{t(`track.st_${o.status}`)}</span></td>
-                      <td className="p-4 text-ink/70 text-sm">${o.ai_cost_usd || 0}</td>
+                      <td className="p-4 text-ink/70 text-sm">${Number(o.ai_cost_usd || 0).toFixed(2)}</td>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <button onClick={() => openOrder(o.id)} data-testid={`view-order-${o.id}`} className="text-terracotta font-bold hover:underline">{t("admin.view")}</button>
@@ -246,7 +246,7 @@ export default function AdminDashboard() {
             <div className="grid sm:grid-cols-3 gap-4">
               <StatCard icon={Package} label={t("admin.totalOrders")} value={stats.total_orders} color="text-navy" />
               <StatCard icon={ChartBar} label={t("admin.revenue")} value={`${stats.revenue_dzd} DZD`} color="text-sage" />
-              <StatCard icon={Coins} label={t("admin.aiCost")} value={`$${stats.total_ai_cost_usd}`} color="text-terracotta" />
+              <StatCard icon={Coins} label={t("admin.aiCost")} value={`$${Number(stats.total_ai_cost_usd || 0).toFixed(2)}`} color="text-terracotta" />
               <StatCard icon={Coins} label={t("x.pendingCod")} value={`${stats.pending_cod_dzd ?? 0} DZD`} color="text-navy" />
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
@@ -274,7 +274,7 @@ export default function AdminDashboard() {
               <Row label={t("x.total")} value={`${selected.amount} DZD (${selected.extra_characters || 0}×${selected.extra_character_price || 0}) · ${t("x.shipping")}: ${selected.shipping_fee ?? 0} DZD`} />
               <Row label={t("track.status")} value={t(`track.st_${selected.status}`)} />
               <Row label={t("x.payment")} value={selected.payment_status === "cod_pending" ? t("x.payConfirmed") : selected.payment_status === "paid" ? t("x.payPaid") : t("x.payPending")} />
-              <Row label={t("admin.aiCost")} value={`$${selected.ai_cost_usd || 0}`} />
+              <Row label={t("admin.aiCost")} value={`$${Number(selected.ai_cost_usd || 0).toFixed(2)}`} />
               {selected.art_style && <Row label={t("x.artStyle")} value={t(`x.style${selected.art_style === "3d" ? "3d" : selected.art_style.charAt(0).toUpperCase() + selected.art_style.slice(1)}`)} />}
               <Row label={t("x.addColoring")} value={selected.add_coloring ? "✓" : "—"} />
               {selected.avg_similarity != null && <Row label={t("admin.similarity")} value={`${selected.avg_similarity} (MOCK)`} />}
